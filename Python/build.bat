@@ -1,3 +1,3 @@
 @echo off
-python main.py coroutine.logtail
+python main.py coroutine.task
 pause
