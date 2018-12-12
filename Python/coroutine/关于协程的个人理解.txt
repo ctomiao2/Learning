@@ -1,0 +1,7 @@
+1. 使用了yield关键字来接收外部输入的函数, Corountine与Generator的区别是Generator是生产者, 而Corotuntine是消费者, 
+Generator的目的是提供数据给其他过程使用, Coroutine的目的是其他过程通过调用协程实例的send方法执行协程函数
+
+2. 协程使用yield传递数据给调用它的过程, 而调用协程的过程则通过send传递数据给协程函数, 用法如下：
+在协程func定义了 x = yield gen_val, 在函数g定义了表达式: y = f.send(co_val)（f是func的一个实例且假设此前已经调用
+过f.next()或f.send(None)）, 则有 x == co_val, y == gen_val, 调用f.send(co_val)后会继续执行func的yield后面的逻辑直到
+再次遇到yield
