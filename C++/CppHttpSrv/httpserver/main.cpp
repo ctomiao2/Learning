@@ -4,7 +4,7 @@
 
 // 初始化HttpServer静态类成员
 mg_serve_http_opts HttpServer::s_server_option;
-std::string HttpServer::s_web_dir = "./web";
+std::string HttpServer::s_web_dir = "./httpserver/web";
 std::unordered_map<std::string, ReqHandler> HttpServer::s_handler_map;
 std::unordered_set<mg_connection *> HttpServer::s_websocket_session_set;
 
