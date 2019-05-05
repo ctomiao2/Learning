@@ -19,3 +19,7 @@
 	
 	3）lcd：先通过lcd切换到本地那个目录下
 	>> lcd c:\            #表示切换到本地的c盘下
+
+**netstat -tulpn:** 查看本地服务器端口映射
+
+**grep -nr pattern * **：查询当前目录下包含pattern的所有文件并显示行号
