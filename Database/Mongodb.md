@@ -136,4 +136,61 @@ eg:
 	      }
 	   }
 	])
+
+
+**读策略**：
+
+1. readPreference：主要控制客户端driver从复制集的哪个节点读取，可方便地实现读写分离、就近读取等策略
+	- primary： 只从primary节点读，默认设置
+	- primaryPreferred：优先从primary读，primary不可用才从secondary读
+	- secondary：只从secondary读
+	- secondaryPerferred：优先从secondary读，没有secondary成员时才从primary读
+	- nearest：根据网络距离就近读取<p>
 	
+2. readConcern：决定在某个实例读取时能读到什么数据
+	- local：能读取任意数据，默认设置
+	- majority：只能读到成功写入到大多数节点的数据
+	
+readConcern旨在解决脏读问题，比如在某个节点读到了一条数据，该数据还没被写入到大多数节点，如果这时primary发生故障，则重启后会rollback掉这条数据，从而此前按local策略读到的数据就是脏数据。
+注意：majority只保证读到的数据不会发生回滚，但并不保证读到的数据是最新的，事实上客户端只会从某个确定的节点读取数据（具体哪个节点由readPreference决定），然后根据该节点的当前状态视图选择已写入到大多数节点的数据。
+<p>
+readConcern实现原理：mongodb要支持majority readConcern级别必须打开replication.enableMajorityReadConcern参数，打开参数后会开启一个snapshot线程，定期对当前数据进行snapshot获得最新的oplog映射表：
+	
+	最新OPLOG时间戳	SNAPSHOT				状态
+	t0				snapshot0				committed
+	t1				snapshot1				uncommitted
+	t2				snapshot2				uncommitted
+	t3				snapshot3				uncommitted
+
+只有确保oplog已经同步到大多数节点了状态才会被标记为committed，客户端读取状态是committed的最新snapshot就能保证读到已写入到绝大多数节点的数据。如何确定oplog已经同步到了大多数节点？
+
+- primary：secondary会在自身oplog发生变化时以及在发送的心跳信息里带上oplog通知到primary，从而primary能很快知道数据是否已被写入到绝大多数节点并更新committed状态，不必要的snapshot也会被定期清理掉。
+- secondary：从primary拉取oplog时，primary会将最新的已写入到绝大多数节点的oplog信息返回给secondary，secondary根据oplog更新自己的snapshot状态。注意：**MongoDB的复制是通过secondary不断拉取oplog并重放来实现的，并不是primary主动将写入同步给secondary**
+
+注意事项：
+
+- 使用 readConcern 需要配置replication.enableMajorityReadConcern选项
+- 只有支持 readCommited 隔离级别的存储引擎才能支持 readConcern，比如 wiredtiger 引擎，而 mmapv1引擎则不能支持。
+
+**writeConcern：**
+
+eg: db.collection.insert({x: 1}, {writeConcern: {w: 1}})
+
+writeConcern选项：
+
+1. w：数据写入到number个节点才向客户端确认：
+
+	- {w: 0}：不需要任何确认，使用于性能要求高不关注正确性的场景。
+	- {w: 1}：默认参数，数据写入到primary节点就返回确认。
+	- {w: n}：n > 1，数据写入到primary且n-1个secondary就返回确认。
+	- {w: "majority"}：数据写入到绝大多数节点才返回确认，对性能有影响，使用于对安全性要求较高的场景。
+
+2. j：写入journal持久化了才通知确认，默认是false。
+3. wtimeout：写入超时时间，仅w大于1时才有效。
+
+{w: “majority”}解析：
+
+1. 客户端向primary请求写入，primary收到请求后本地写入数据并记录写请求到oplog，然后等待绝大多数节点都同步了这条\批oplog（secondary更新了oplog后会上报给primary）
+2. secondary拉取到primary新写入的oplog，本地重放并记录oplog。为了能让secondary尽快拉取到最新的oplog，find提供了awaitData的选项，当没有查到数据时会等待maxTimeMS（默认2s）后再看是否有满足条件的数据，如有则会返回，因此当primary有最新写入oplog，secondary能很快拉取到。
+3. secondary上有自己的单独线程，当oplog最新的时间戳发生变化时就会将自己最新的oplog时间戳通过replSetUpdatePosition命令发送给primary去更新primary上记录的该secondary已完成同步的oplog时间戳。
+4. 当primary发现已经有足够多的secondary的oplog时间戳满足条件时就会返回确认结果给客户端。

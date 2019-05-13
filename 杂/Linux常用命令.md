@@ -22,4 +22,5 @@
 
 **netstat -tulpn:** 查看本地服务器端口映射
 
-**grep -nr pattern * **：查询当前目录下包含pattern的所有文件并显示行号
+**grep -nr pattern**：查询当前目录下包含pattern的所有文件并显示行号
+**gzip -dc myfile.gz | grep abc**：grep gz文件
