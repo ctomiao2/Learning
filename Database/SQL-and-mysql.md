@@ -205,8 +205,9 @@
 
 列的默认值实际是存在.frm文件，该语句会直接修改.frm文件而不涉及表数据。
 
-**索引：** innodb索引采用B+ Tree数据结构，叶子节点会保存数据和指向下一个叶子节点的指针（用于范围查询)，适用于全键值、
-键值范围或键前缀查找，其中键前缀查找只适用于根据最左前缀查找。
+**索引：** 
+
+- **B Tree索引**：innodb索引采用B+ Tree数据结构，叶子节点会保存数据和指向下一个叶子节点的指针（用于范围查询)，适用于全键值、键值范围或键前缀查找，其中键前缀查找只适用于根据最左前缀查找。
 
 	CREATE TABLE People(
 		last_name varchar(50) not null,
@@ -215,8 +216,35 @@
 		key(last_name, first_name, birthday)
 	);
 
-索引查询的限制：
+	B Tree索引查询的限制：
 
-- 如果不是按照索引最左列开始查找则无法适用索引，如单独使用first_name或birthday查询将无法使用索引;
-- 不能跳过索引中的某一列，如使用last_name和birthday进行查询时将只能使用索引中的第一列；
-- 如果查询中有某个列的范围查询则无法使用该列右边的列，如: SELECT * FROM People WHERE last_name='WANG' and first_name LIKE 'Bob%' and birthday='1976-02-03'将只使用last_name和first_name两列
+	- 如果不是按照索引最左列开始查找则无法适用索引，如单独使用first_name或birthday查询将无法使用索引;
+	- 不能跳过索引中的某一列，如使用last_name和birthday进行查询时将只能使用索引中的第一列；
+	- 如果查询中有某个列的范围查询则无法使用该列右边的列，如: SELECT * FROM People WHERE last_name='WANG' and first_name LIKE 'Bob%' and birthday='1976-02-03'将只使用last_name和first_name两列
+
+- **高性能索引策略：**
+
+	1. 使用独立列，即query的列不能是表达式，否则索引失效，eg： SELECT * from t WHERE t.id+1=4。
+	2. 适当使用前缀索引, 某些字符串列本身较长不适合作索引，可以截取前缀字符串做索引。
+	3. 多列索引：多个索引列相交查询（通常是用AND），应使用复合索引；当对多个索引进行联合操作（通常是OR）时，需要消耗大量的cpu和内存资源来对查询结果进行缓存、合并、排序。
+		
+		`select * from t where t.name='jack' or t.age=10`	
+		
+		该查询在老版本的mysql会全表扫描，更好的替代是：
+		
+		`select * from t where t.age=10 union all
+		select * from t where t.name='jack' and t.age<>10
+		`
+	4. 复合索引按选择性排序通常是较好的做法。
+
+- **索引结构：**
+
+	![](./img/index.png)
+	
+	从图可以看出innodb主键索引的叶子节点存储了整行的数据，二级索引叶子节点存的时主键值；而MyISAM的主键索引和二级索引的叶子节点存的都是指向行数据的指针。因此对于MyISAM，当出现行移动或者页裂时需要同时维护二级索引的更新。
+	- **innodb索引的优点：**
+		1. 可以把相关数据保存在一起，例如实现电子邮箱时可以根据用户ID来聚集数据，这样只需从磁盘读取少数数据页就能获取某个用户的全部邮件，如果没有使用聚簇索引则每封邮件都可能导致一次磁盘I/O。
+		2. 数据访问更快，聚簇索引将索引和数据保存在同一个B-Tree，因此从聚簇索引中获取数据通常比在非聚簇索引中查找要快。
+	- **innodb索引的缺点：**
+		1. 插入速度严重依赖插入顺序，按照主键的顺序插入是加载数据到innodb表中速度最快的方式，如果不是按主键顺序加载数据，那么在加载完成后最好使用OPTIMIZE TABLE命令重新组织下表。
+		2. 
