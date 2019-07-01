@@ -71,4 +71,6 @@ eg:
 
 - unzip [Options] file[.zip]
 
-eg: `unzip aaa.zip`
+eg: `unzip aaa.zip `
+
+**du -sh *: ** 查看目录空间
