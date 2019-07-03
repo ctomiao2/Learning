@@ -9,7 +9,7 @@
 	
 	SDS_HDR(16, "abc")等价于((struct sdshdr16 *)(("abc")-(sizeof(struct sdshdr16))))
 
-Simple Dynamic String (SDS)：Redis字符串数据结构，数据结构如下：
+**Simple Dynamic String (SDS)**：Redis字符串数据结构，数据结构如下：
 
     struct __attribute__ ((__packed__)) sdshdr8 {
 		uint8_t len;
@@ -23,4 +23,30 @@ Simple Dynamic String (SDS)：Redis字符串数据结构，数据结构如下：
     typedef char *sds;
 	sds sdsnewlen(const void *init, size_t initlen);
 
-实现原理是分配一个hdrlen+initlen+1大小的连续内存,其中hdrlen等于根据initlen决定采用何种类型sdshdr的size，该内存的前hdrlen被用来初始化sdshdr，后initlen+1用来拷贝init字符串，函数返回hdrlen开始的字符串，即init字符串的拷贝内容串。访问该字符串的长度时无需使用strlen，而是通过将指针往前偏移hdrlen还原得到sdshdr实例，直接访问sdshdr.len。
+实现原理是分配一个hdrlen+initlen+1大小的连续内存,其中hdrlen等于根据initlen决定采用何种类型sdshdr的size，该内存的前hdrlen被用来初始化sdshdr，后initlen+1用来拷贝init字符串，函数返回hdrlen开始的字符串，即init字符串的拷贝内容串。访问该字符串的长度时无需使用strlen，而是通过将指针往前偏移hdrlen还原得到sdshdr实例，直接访问sdshdr.len。更详细源码参见sds.h\sds.c。
+
+**list**：Redis自己实现了双向链表，数据结构如下：
+	
+	// 链表节点 
+	typedef struct listNode {
+		struct listNode *prev;
+		struct listNode *next;
+		void *value;
+	} listNode;
+	
+	// 双端链表
+	typedef struct list {
+		listNode *head;
+		listNode *tail;
+		void* (*dup)(void *ptr); //自定义拷贝value函数
+		void (*free)(void *ptr); //自定义销毁value函数
+		int (*match)(void *ptr, void *key); //自定义比较value函数
+		unsigned long len;	
+	} list;
+	
+	//迭代器
+	typedef struct listIter {
+	    listNode *next;
+	    int direction;
+	} listIter;
+
