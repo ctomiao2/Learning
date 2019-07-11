@@ -74,3 +74,13 @@ eg:
 eg: `unzip aaa.zip `
 
 **du -sh *: ** 查看目录空间
+
+**dpkg -s package_name：** 检查package是否install
+
+**shell脚本将命令返回值传递给变量：**
+
+	var=`command` 或者 var=$(command)， eg: 
+	ret=$(dpkg -s jq | grep "install ok installed")
+	echo $ret
+
+**sed：** 文本替换， sed '/s1/s2', eg: echo "aa" | sed 's/\"//g'

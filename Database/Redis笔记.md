@@ -50,3 +50,88 @@
 	    int direction;
 	} listIter;
 
+**dict**：
+
+反转二进制位算法，(abcdefgh)<sub>2</sub> ==> (hgfedcba)<sub>2</sub>
+
+	1. 对调相邻的1位(abcdefgh-> badcfehg):
+	   v = (abcdefgh)
+	   (badcfehg) = (0a0c0e0g)|(b0d0f0h0) = ((v>>1)&(01010101)) | ((v&01010101)<<1)
+	   即 v = ((v >> 1) & 0x55555555) | ((v & 0x55555555)<< 1);
+    2. 对调相邻的2位(abcdefgh-> cdabghef):
+       同上可得：v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
+	3. 对调相邻的4位(abcd efgh-> efgh abcd)：
+	   同上可得：v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
+	4. 对调相邻的8位(相邻的字节)：
+	   同上可得：v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
+    5. 对调相邻的16位（相邻的两字节）
+       同上可得：v = (v >> 16) | (v<< 16);
+	
+	至此32位数的二进制位被翻转过来，上面几个步骤也可以倒过来，最后结果是一样。因此redis里翻转二进制位的算法是这样：
+	
+	static unsigned long rev(unsigned long v) {
+	    unsigned long s = 8 * sizeof(v); // bit size; must be power of 2
+	    unsigned long mask = ~0;
+	    while ((s >>= 1) > 0) {
+	        mask ^= (mask << s);
+	        v = ((v >> s) & mask) | ((v << s) & ~mask);
+	    }
+	    return v;
+	}
+
+
+**quicklist：**
+
+quicklistNode采用位域声明方式：
+
+	typedef struct quicklistNode {
+	    struct quicklistNode *prev;
+	    struct quicklistNode *next;
+	    unsigned char *zl;
+	    unsigned int sz;             /* ziplist size in bytes */
+	    unsigned int count : 16;     /* count of items in ziplist */
+	    unsigned int encoding : 2;   /* RAW==1 or LZF==2 */
+	    unsigned int container : 2;  /* NONE==1 or ZIPLIST==2 */
+	    unsigned int recompress : 1; /* was this node previous compressed? */
+	    unsigned int attempted_compress : 1; /* node can't compress; too small */
+	    unsigned int extra : 10; /* more bits to steal for future usage */
+	} quicklistNode;
+	
+	这里从变量count开始，都采用了位域的方式进行数据的内存声明，使得6个unsigned int变量只用到了一个unsigned int的内存大小。
+	C语言支持位域的方式对结构体中的数据进行声明，也就是可以指定一个类型占用几位：
+	1) 如果相邻位域字段的类型相同，且其位宽之和小于类型的sizeof大小，则后面的字段将紧邻前一个字段存储，直到不能容纳为止；
+	2) 如果相邻位域字段的类型相同，但其位宽之和大于类型的sizeof大小，则后面的字段将从新的存储单元开始，其偏移量为其类型大小的整数倍；
+	3) 如果相邻的位域字段的类型不同，则各编译器的具体实现有差异，VC6采取不压缩方式，Dev-C++采取压缩方式；
+	4) 如果位域字段之间穿插着非位域字段，则不进行压缩；
+	5) 整个结构体的总大小为最宽基本类型成员大小的整数倍。
+
+**\_\_builtin_expect：** GCC编译器特有的语法，用于分支预测。
+声明形式：long __builtin_expect(long exp, long c);
+期望 exp 表达式的值等于常量 c, 如果 c 的值为0(即期望的函数返回值), 那么执行if分支的的可能性小, 否则执行 else 分支的可能性小(函数的返回值等于第一个参数 exp)，GCC在编译过程中，会将可能性更大的代码紧跟着前面的代码，从而减少指令跳转带来的性能上的下降, 达到优化程序的目的。 eg:
+
+	#define likely(x)      __builtin_expect(!!(x), 1)
+	#define unlikely(x)    __builtin_expect(!!(x), 0)
+	
+	// 期望 x == 0, 所以执行func()的可能性小
+	if (unlikely(x))
+	{
+	    func();
+	}
+	else
+	{
+	　　//do someting
+	}
+
+	// 期望 x == 1, 所以执行func()的可能性大
+	if (likely(x))
+	{
+	    func();
+	}
+	else
+	{
+	　　//do someting
+	}
+
+原理：if else 句型编译后, 一个分支的汇编代码紧随前面的代码,而另一个分支的汇编代码需要使用JMP指令才能访问到。通过JMP访问需要更多的时间, 在复杂的程序中,有很多的if else句型,又或者是一个有if else句型的库函数,每秒钟被调用几万次, 通常程序员在分支预测方面做得很糟糕, 编译器又不能精准的预测每一个分支,这时JMP产生的时间浪费就会很大。
+
+
