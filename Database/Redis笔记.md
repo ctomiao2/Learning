@@ -134,4 +134,6 @@ quicklistNode采用位域声明方式：
 
 原理：if else 句型编译后, 一个分支的汇编代码紧随前面的代码,而另一个分支的汇编代码需要使用JMP指令才能访问到。通过JMP访问需要更多的时间, 在复杂的程序中,有很多的if else句型,又或者是一个有if else句型的库函数,每秒钟被调用几万次, 通常程序员在分支预测方面做得很糟糕, 编译器又不能精准的预测每一个分支,这时JMP产生的时间浪费就会很大。
 
+**ziplist：** https://redisbook.readthedocs.io/en/latest/compress-datastruct/ziplist.html
+
 
