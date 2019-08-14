@@ -220,7 +220,7 @@ mongodb选举步骤：
 - 如果集群中选举出来的主节点或者所有从节点最后一次同步时间看起来很旧了，停止选举等待人来操作。
 - 如果上面都没有问题就选择最后操作时间戳最新（保证数据是最新的）的服务器节点作为主节点。
 
-Paxios算法：
+Paxios算法：(附Raft算法: [http://thesecretlivesofdata.com/raft/](http://thesecretlivesofdata.com/raft/ "raft算法原理")
 ![](./img/Paxos.png)
 
 选举触发条件：
