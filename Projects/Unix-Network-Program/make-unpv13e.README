@@ -1,0 +1,27 @@
+./configure
+cd lib
+make
+cd ../libfree
+make
+cd ../libroute
+make // 出错可忽略, 说明不支持4.4BSD, 不影响学习
+cd ../libgai
+make
+cd ../回到根目录
+sudo cp libunp.a /usr/lib
+sudo cp libunp.a /usr/lib64
+vi lib/unp.h // 将#include "../config.h"修改为#include "config.h"
+sudo cp lib/unp.h /usr/include 
+sudo cp config.h /usr/include 
+
+cd ./intro
+gcc daytimetcpcli.c -o daytimetcpcli -lunp
+./daytimetcpcli 127.0.0.1
+//执行会报错 connect error: Connection refused, 原因是daytime服务程序没开
+sudo apt-get install xinetd
+cd /etc/xinetd.d/ 
+sudo vi daytime 
+/ 将daytime文件中的disable改为no, 重启服务
+sudo service xinetd restart
+
+DONE.
