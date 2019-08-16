@@ -26,6 +26,9 @@
 
 **gzip -dc myfile.gz | grep abc**：grep gz文件
 
+**sudo find /etc -name sources.list**: 查找/etc目录下的source.list文件
+
+
 **压缩\解压命令大全：**
 
 - gzip [Options] file1 file2 file3：
@@ -84,3 +87,18 @@ eg: `unzip aaa.zip `
 	echo $ret
 
 **sed：** 文本替换， sed '/s1/s2', eg: echo "aa" | sed 's/\"//g'
+
+** vi常用命令：**
+
+	80gg：跳到80行
+	// 查看vim是否支持剪贴板
+	vim --version | grep "clipboard"
+	// clipboard前面出现-号就说明不支持, 安装图形版, 安装后再输入上个命令发现clipboard前面是+了
+	sudo apt-get install vim-gnome
+	"+y 将内容复制到特定的剪切板
+	"+p 将系统剪切板的内容拷贝到vim
+	
+
+**sudo apt-get update**： 更新源, 当apt-get install出现404错误时用这个命令更新
+
+**svn status --no-ignore**: svn change list查看
