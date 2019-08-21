@@ -97,8 +97,20 @@ eg: `unzip aaa.zip `
 	sudo apt-get install vim-gnome
 	"+y 将内容复制到特定的剪切板
 	"+p 将系统剪切板的内容拷贝到vim
+	"zi 打开关闭折叠
+	"zv 查看此行
+	zm 关闭折叠
+	zM 关闭所有
+	zr 打开
+	zR 打开所有
+	zc 折叠当前行
+	zo 打开当前折叠
+	zd 删除折叠
+	zD 删除所有折叠
 	
 
 **sudo apt-get update**： 更新源, 当apt-get install出现404错误时用这个命令更新
 
 **svn status --no-ignore**: svn change list查看
+
+**tcpdump**: 查看tcp分组

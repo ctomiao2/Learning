@@ -45,6 +45,54 @@ inet\_pton和inet\_ntop对于IPv4和IPv6地址都适用，其中p表示presentat
 	const char *inet_ntop(int family, const void *addrptr, char *strptr, size_t len); //若成功则为指向结果的指针, 出错则为NULL
 
 其中family取AF_INET或AF_INET6。
+
+**socket函数：**
+
+	#inlcude <sys/socket.h>
+	int socket(int family, int type, int protocol);
+	// family: AF_INET、AF_INET6...
+	// type: SOCK_STREAM字节流套接字、SOCK_DGRAM数据报套接字、SOCK_SEQPACKET有序分组套接字、SOCK_RAW原始套接字
+	// protocol: IPPROTO_TCP、IPPROTO_UDP、IPPROTO_SCTP
+
+	                                                              TCP服务器
+																  socket()
+																	 ||
+																   bind()
+																	 ||
+																  listen()
+                                                                     ||
+                                                                   accept()
+																	 || 一直阻塞到客户端连接到达
+		TCP客户端                                                     ||
+		socket()                                                     ||
+		   ||                  TCP三次握手                            ||
+		connect() ---------------------------------------------------||
+           ||                  数据请求
+		write() ---------------------------------------------------->read()
+                               数据应答                               || 处理请求
+        read() <-----------------------------------------------------
+		                       文件结束通知
+		close() ----------------------------------------------------> read()
+																	  close()
+	// 成功返回0, 出错返回-1
+	int connect(int sockfd, const struct sockaddr *servaddr, socklen_t addrlen)
+	
+	// 成功返回0, 出错返回-1, ip和端口都可选，如不指定则由内核选择。
+	int bind(int sockfd, const struct sockaddr *myaddr, socklen_t addrlen) 
+	
+	// listen函数仅由TCP服务器调用, 当socket函数创建一个套接字时它被假设为一个主动套接字即
+	// 它是一个将调用connect发起连接的客户套接字。listen函数将一个未连接的套接字转换成一个被动套接字，
+	// 指示内核应接受指向该套接字的连接请求，调用listen将导致套接字从CLOSED状态转换到LISTEN状态。
+	// 内核为每一个给定的监听套接字维护了两个队列：
+	// 1)未完成连接队列: 服务器正在等待完成相应的TCP三路握手过程, 这些套接字处于SYN_RCVD状态。
+	// 2)已完成连接队列, 已完成TCP三路握手, 这些套接字处于ESTABLISHED状态。
+	// backlog指定了两种队列之和的最大数量, 当队列满时, TCP服务器将忽略客户端发来的SYN(如果返回RST将导致客户端终止而不会重试)
+	int listen(int sockfd, int backlog)  // 成功返回0, 出错则为-1
+	
+	// 成功则返回非负描述符, 出错则-1。用于从已完成连接队列队头返回下一个已完成连接，如果已完成连接队列为空，
+	// 那么进程被投入睡眠（假定套接字为默认的阻塞方式）, 第一个参数sockfd为前面的socket()创建的及bind函数
+	// 和listen函数的第一个sockfd参数, 返回已连接队列中的代表与某个客户端连接的描述符。
+	int accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen);
 	
 	
 
