@@ -93,6 +93,57 @@ inet\_pton和inet\_ntop对于IPv4和IPv6地址都适用，其中p表示presentat
 	// 那么进程被投入睡眠（假定套接字为默认的阻塞方式）, 第一个参数sockfd为前面的socket()创建的及bind函数
 	// 和listen函数的第一个sockfd参数, 返回已连接队列中的代表与某个客户端连接的描述符。
 	int accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen);
+
+**fork:**
+
+	#include <unistd.h>
 	
+	pid_t fork(void); // 子进程中返回0, 父进程中返回子进程id, 出错则返回-1
+
+父进程中调用fork之前打开的所有描述符在fork返回之后由子进程分享，父进程调用accept之后调用fork, 所接受的已连接套接字随后就在父进程与子进程之间共享。fork的两种典型用法：
 	
+1. 一个进程创建一个自身的副本, 这样每个副本都可以在另一个副本执行其他任务的同时处理各自的某个操作, 这是网络服务器的典型用法。
+	
+2. 一个进程想要执行另一个程序，进程调用fork创建一个自身的副本然后子进程调用exec把自身替换成新的程序，这是Shell之类程序的典型用法。存放在硬盘上的可执行程序文件能够被unix执行的唯一方法是由一个现有进程调用exec函数将当前进程映像替换成新的程序文件，该新程序通常从main函数开始执行，进程ID并不改变，称调用exec的进程为调用进程(calling process)，新执行的程序为新程序(new program), 注意是新程序而不是新进程，因为exec并没有创建新的进程。
+	
+
+		#include <unistd.h>
+	
+		int execl(const char *pathname, const char *arg0, .../* (char*) 0 */);
+		int execv(const char *pathname, char *const argv[]);
+		int execle(const char *pathname, const char *arg0, .../* (char*)0, char *const envp[] */);
+		int execve(const char *pathname, char *const argv[], char *const envp[]);
+		int execlp(const char *filename, const char *arg0, ... /* (char *) 0 */);
+		int execvp(const char *filename, char *const argv[]);
+
+调用关系图：
+
+![](./img/unix-exec.png)
+
+	
+	int main(int argc, char **argv)
+	{
+		int listenfd, connfd;
+		socklen_t len;
+		struct sockaddr_in servaddr, cliaddr;
+		listenfd = socket(AF_INET, SOCK_STREAM, 0);
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family = AF_INET;
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		servaddr.sin_port = htons(7000);
+		bind(listenfd, (const struct servaddr*) &servaddr, sizeof(servaddr));
+		listen(listenfd, LISTENQ);
+		while (1){
+			connfd = accept(listenfd, (struct servaddr*) &cliaddr, &len);
+			// fork前只有父进程引用了listenfd、connfd，计数为1
+			if (fork() == 0) {
+				// 此时listenfd、connfd引用计数都为2
+				close(listenfd); // 子进程中执行完后listenfd引用计数为1
+				do_something();
+				close(connfd);  // 子进程中执行完后connfd引用计数为0即被销毁
+				exit(0)
+			}
+			close(connfd); // 执行完后引用计数为1, 注意这是在父进程中执行
+		}
+	}
 

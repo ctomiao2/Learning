@@ -187,4 +187,10 @@ ALL显示所有5个开关。
 
 
 **使用watch命令**: 配合ifconfig、more /proc/net/dev、cat /proc/net/dev来实时监控。比如执行 watch -n 1 "ifconfig eth0"
+	
+**添加.git文件夹A的正确姿势：**
+
+	删除 A/ 的.git 文件夹
+	在 ./ 下输入”git rm -r --cached A/“ //谨记：是 A/ ，意为A目录下
+	在 ./ 下输入”git add A”
 
