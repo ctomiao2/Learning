@@ -26,6 +26,11 @@
 
 **gzip -dc myfile.gz | grep abc**：grep gz文件
 
+**sudo find /etc -name sources.list**: 查找/etc目录下的source.list文件
+
+**find / -type d -name 'httpdocs'**： 查找文件夹名是httpdocs的，/表示根目录，.表示当前目录
+
+
 **压缩\解压命令大全：**
 
 - gzip [Options] file1 file2 file3：
@@ -84,3 +89,108 @@ eg: `unzip aaa.zip `
 	echo $ret
 
 **sed：** 文本替换， sed '/s1/s2', eg: echo "aa" | sed 's/\"//g'
+
+** vi常用命令：**
+
+	80gg：跳到80行
+	// 查看vim是否支持剪贴板
+	vim --version | grep "clipboard"
+	// clipboard前面出现-号就说明不支持, 安装图形版, 安装后再输入上个命令发现clipboard前面是+了
+	sudo apt-get install vim-gnome
+	"+y 将内容复制到特定的剪切板
+	"+p 将系统剪切板的内容拷贝到vim
+	"zi 打开关闭折叠
+	"zv 查看此行
+	zm 关闭折叠
+	zM 关闭所有
+	zr 打开
+	zR 打开所有
+	zc 折叠当前行
+	zo 打开当前折叠
+	zd 删除折叠
+	zD 删除所有折叠
+	
+
+**sudo apt-get update**： 更新源, 当apt-get install出现404错误时用这个命令更新
+
+**svn status --no-ignore**: svn change list查看
+
+**tcpdump**: 查看tcp分组
+
+**set ff=unix**：用vim打开，输入:set ff=unix将文件转换为unix格式
+
+**网卡流量相关：**
+
+**sar -n DEV 1 2**
+
+命令后面1 2 意思是：每一秒钟取1次值，取2次。
+DEV显示网络接口信息
+另外，-n参数很有用，他有6个不同的开关：DEV | EDEV | NFS | NFSD | SOCK | ALL ，其代表的含义如下：
+
+DEV显示网络接口信息。
+EDEV显示关于网络错误的统计数据。
+NFS统计活动的NFS客户端的信息。
+NFSD统计NFS服务器的信息
+SOCK显示套接字信息
+ALL显示所有5个开关。
+
+	[sre@CDVM-213017031 ~]$ sar -n DEV 1 2
+	Linux 2.6.32-431.el6.x86_64 (CDVM-213017031)    05/04/2017  _x86_64_    (4 CPU)
+	
+	08:05:30 PM     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s
+	08:05:31 PM        lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+	08:05:31 PM      eth0   1788.00   1923.00    930.47    335.60      0.00      0.00      0.00
+	
+	08:05:31 PM     IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s
+	08:05:32 PM        lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+	08:05:32 PM      eth0   1387.00   1469.00    652.12    256.98      0.00      0.00      0.00
+	
+	Average:        IFACE   rxpck/s   txpck/s    rxkB/s    txkB/s   rxcmp/s   txcmp/s  rxmcst/s
+	Average:           lo      0.00      0.00      0.00      0.00      0.00      0.00      0.00
+	Average:         eth0   1587.50   1696.00    791.29    296.29      0.00      0.00      0.00
+
+参数说明：
+
+- IFACE：LAN接口
+- rxpck/s：每秒钟接收的数据包
+- txpck/s：每秒钟发送的数据包
+- rxbyt/s：每秒钟接收的字节数
+- txbyt/s：每秒钟发送的字节数
+- rxcmp/s：每秒钟接收的压缩数据包
+- txcmp/s：每秒钟发送的压缩数据包
+- rxmcst/s：每秒钟接收的多播数据包
+- rxerr/s：每秒钟接收的坏数据包
+- txerr/s：每秒钟发送的坏数据包
+- coll/s：每秒冲突数
+- rxdrop/s：因为缓冲充满，每秒钟丢弃的已接收数据包数
+- txdrop/s：因为缓冲充满，每秒钟丢弃的已发送数据包数
+- txcarr/s：发送数据包时，每秒载波错误数
+- rxfram/s：每秒接收数据包的帧对齐错误数
+- rxfifo/s：接收的数据包每秒FIFO过速的错误数
+- txfifo/s：发送的数据包每秒FIFO过速的错误数
+
+<br>
+
+**cat /proc/net/dev**
+
+	$ cat /proc/net/dev
+	Inter-|   Receive                                                |  Transmit
+	 face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+	    lo:137052296  108029    0    0    0     0          0         0 137052296  108029    0    0    0     0       0          0
+	  eth0:13661574714188 31346790620    0    0    0     0          0         0 5097461049535 27671144304    0    0    0     0       0          0
+	  
+	  最左边的表示接口的名字，Receive表示收包，Transmit表示发送包；
+	  bytes表示收发的字节数；
+	  packets表示收发正确的包量；
+	  errs表示收发错误的包量；
+	  drop表示收发丢弃的包量；
+
+
+**使用watch命令**: 配合ifconfig、more /proc/net/dev、cat /proc/net/dev来实时监控。比如执行 watch -n 1 "ifconfig eth0"
+	
+**添加.git文件夹A的正确姿势：**
+
+	删除 A/ 的.git 文件夹
+	在 ./ 下输入”git rm -r --cached A/“ //谨记：是 A/ ，意为A目录下
+	在 ./ 下输入”git add A”
+
