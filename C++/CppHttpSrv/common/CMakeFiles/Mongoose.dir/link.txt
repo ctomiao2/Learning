@@ -1,0 +1,2 @@
+/usr/bin/ar qc libMongoose.a  CMakeFiles/Mongoose.dir/mongoose.c.o
+/usr/bin/ranlib libMongoose.a

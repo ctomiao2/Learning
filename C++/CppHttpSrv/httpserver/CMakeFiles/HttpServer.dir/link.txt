@@ -1,0 +1,2 @@
+/usr/bin/ar qc libHttpServer.a  CMakeFiles/HttpServer.dir/http_server.cpp.o CMakeFiles/HttpServer.dir/main.cpp.o
+/usr/bin/ranlib libHttpServer.a

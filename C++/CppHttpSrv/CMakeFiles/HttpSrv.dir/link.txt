@@ -1,0 +1,1 @@
+/usr/bin/c++   -O0 -Wall -g -ggdb  -rdynamic CMakeFiles/HttpSrv.dir/httpserver/http_server.cpp.o CMakeFiles/HttpSrv.dir/httpserver/main.cpp.o  -o HttpSrv common/libMongoose.a 

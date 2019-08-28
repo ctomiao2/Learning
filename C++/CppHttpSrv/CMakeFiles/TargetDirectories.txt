@@ -1,0 +1,12 @@
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/CMakeFiles/rebuild_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/CMakeFiles/HttpSrv.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/CMakeFiles/edit_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/common/CMakeFiles/rebuild_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/common/CMakeFiles/Mongoose.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/common/CMakeFiles/edit_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/httpserver/CMakeFiles/rebuild_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/httpserver/CMakeFiles/HttpServer.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/httpserver/CMakeFiles/edit_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/httpclient/CMakeFiles/rebuild_cache.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/httpclient/CMakeFiles/HttpClient.dir
+/home/yingww/GitProj/Learning/C++/CppHttpSrv/httpclient/CMakeFiles/edit_cache.dir

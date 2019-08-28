@@ -1,0 +1,6 @@
+Python/FlaskDemo/env
+*.a
+*.swp
+*.out
+*.pyc
+*.o
