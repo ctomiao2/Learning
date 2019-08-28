@@ -93,6 +93,8 @@ inet\_pton和inet\_ntop对于IPv4和IPv6地址都适用，其中p表示presentat
 	// 那么进程被投入睡眠（假定套接字为默认的阻塞方式）, 第一个参数sockfd为前面的socket()创建的及bind函数
 	// 和listen函数的第一个sockfd参数, 返回已连接队列中的代表与某个客户端连接的描述符。
 	int accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen);
+	
+- **在收到tcp三次握手的第二个分节后，客户端的connect返回，在收到第三个分节后服务端的accept才会返回。**
 
 **fork:**
 
@@ -147,3 +149,130 @@ inet\_pton和inet\_ntop对于IPv4和IPv6地址都适用，其中p表示presentat
 		}
 	}
 
+
+**getsockname、getpeername：**
+
+	#include <sys/socket.h>
+	
+	int getsockname(int sockfd, struct sockaddr *localaddr, socklen_t *addrlen);
+	int getpeername(int sockfd, struct sockaddr *peeraddr, socklen_t *addrlen);
+
+- 在没有调用bind的tcp客户端上, connect返回成功后getsockname用于返回由内核赋予该连接的本地ip地址和本地端口号；
+	
+		struct sockaddr_in saddr;
+		socklen_t slen = sizeof(saddr);
+		getsockname(sockfd, (SA*) &saddr, &slen);
+
+- 以端口号0调用bind后, getsockname返回由内核赋予的本地端口号；
+
+- 当一个服务器由调用过accept的某个进程通过调用exec执行程序时，使用getpeername获取客户身份。
+
+tcp客户端example:
+ 
+	// tcp客户端 client.c
+	#include "unp.h"
+	
+	void str_cli(FILE *fp, int sockfd)
+	{
+	    char recvline[MAXLINE], sendline[MAXLINE];
+	    while (fgets(sendline, MAXLINE, fp) > 0){
+	        write(sockfd, sendline, strlen(sendline));
+	        size_t n;
+	        if ((n=read(sockfd, recvline, sizeof(recvline)) < 0))
+	            err_sys("read socker error\n");
+	        printf("%s", recvline);
+	        //fputs(recvline, stdout);
+	    }
+	}
+	
+	int main(int argc, char **argv)
+	{
+	    int sockfd, n;
+	    char recvline[MAXLINE+1];
+	    struct sockaddr_in servaddr;
+	    if (argc != 2) err_quit("usage: client <ip>");
+	    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	        err_sys("socket error");
+	    bzero(&servaddr, sizeof(servaddr));
+	    servaddr.sin_family = AF_INET;
+	    servaddr.sin_port = htons(7000);
+	    
+	    if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0)
+	        err_quit("inet_pton error for %s", argv[1]);
+	
+	    int connfd;
+	    if (connect(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr)) < 0)
+	        err_sys("connect error");
+	    
+	    str_cli(stdin, sockfd);
+	
+	    exit(0);
+	}
+
+
+tcp服务端example:
+
+	// tcp服务端 server.c
+	#include "unp.h"
+	#include <time.h>
+	
+	void response(int connfd)
+	{
+		char buff[MAXLINE];
+		const char *sign_str = " ==> reply from server\n";
+		size_t n;
+		
+		again:
+		while ((n=read(connfd, buff, MAXLINE)) > 0) {
+		    printf("read succ, n: %d, %s", n, buff);
+		    memcpy(buff+n-1, sign_str, strlen(sign_str)+1); 
+		    writen(connfd, buff, n+strlen(sign_str));
+		}
+		
+		printf("read socket: %d\n", n);
+		
+		if (n < 0 && errno == EINTR)
+		    goto again;
+		else if (n < 0)
+		    err_sys("socket read error");
+	}
+	
+	int main(int argc, char **argv)
+	{
+		int listenfd, connfd;
+		socklen_t len;
+		struct sockaddr_in servaddr, cliaddr;
+		//char buff[MAXLINE];
+		//time_t ticks;
+		listenfd = socket(AF_INET, SOCK_STREAM, 0);
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family = AF_INET;
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		servaddr.sin_port = htons(7000);
+		bind(listenfd, (const struct servaddr*) &servaddr, sizeof(servaddr));
+		listen(listenfd, LISTENQ);
+		char buff[MAXLINE];
+		
+		while(1) {
+		    len = sizeof(cliaddr);
+		    connfd = accept(listenfd, (struct servaddr*) &cliaddr, &len);
+		    
+		    printf("connection from %s, port %d\n",
+		        inet_ntop(AF_INET, &cliaddr.sin_addr, buff, sizeof(buff)),
+		        ntohs(cliaddr.sin_port));
+		    
+		    if (fork() == 0) {
+		        close(listenfd);
+		        response(connfd);
+		        exit(0);
+		    }
+		    close(connfd);
+		}
+		exit(0);
+	}
+
+
+当客户端中止程序时（即输入CTRL-D），client.c的fgets将返回0, 从而触发main函数里的exit(0)，进程终止要处理的工作是有内核关闭
+所有之前打开的描述服，这会导致客户端想服务端发送FIN及服务端返回ACK。此时服务器处于CLOSE\_WAIT状态，客户端处于FIN\_WAIT\_2状态；
+服务端阻塞于read调用，在收到客户端发来的FIN时read返回0从而触发子进程的exit(0), 注意此时父进程仍然在主循环不会退出。 子进程的关闭将导致关闭对应的连接描述符，这将导致服务端向客户端发送FIN以及客户端的ACK。此时连接完全终止，客户端进入TIME\_WAIT状态。
+**服务器子进程终止时将给父进程发送SIGCHLD信号，如不在程序捕获该信号将默认忽略该信号，将导致子进程进入僵死状态。**
