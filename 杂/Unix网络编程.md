@@ -275,4 +275,131 @@ tcp服务端example:
 当客户端中止程序时（即输入CTRL-D），client.c的fgets将返回0, 从而触发main函数里的exit(0)，进程终止要处理的工作是有内核关闭
 所有之前打开的描述服，这会导致客户端想服务端发送FIN及服务端返回ACK。此时服务器处于CLOSE\_WAIT状态，客户端处于FIN\_WAIT\_2状态；
 服务端阻塞于read调用，在收到客户端发来的FIN时read返回0从而触发子进程的exit(0), 注意此时父进程仍然在主循环不会退出。 子进程的关闭将导致关闭对应的连接描述符，这将导致服务端向客户端发送FIN以及客户端的ACK。此时连接完全终止，客户端进入TIME\_WAIT状态。
-**服务器子进程终止时将给父进程发送SIGCHLD信号，如不在程序捕获该信号将默认忽略该信号，将导致子进程进入僵死状态。**
+**服务器子进程终止时内核将给父进程发送SIGCHLD信号，如不在程序捕获该信号将默认忽略该信号，将导致子进程进入僵死状态。**
+
+
+**signal：**
+
+- 由一个进程发给另一个进程（或自身）；
+- 由内核发给某个进程。
+
+可通过sigaction函数设定一个信号的处理，信号处理函数原型：
+	
+	void handler(int signo);
+	# tips: 关于函数指针
+	# 以函数声明void * (*(*func)(int))[10]为例, 从内至外分析
+	# (*func)(int)表示func是一个函数指针, 参数是int类型, 那么func代表的函数返回值是什么呢？
+	# *(*func)(int)最外层的*表示func代表的函数是返回一个指针类型，那么这个指针是什么类型的指针呢？
+	# 最外面的是void * [10]，因此返回一个指向void* [10]的指针
+	# 再举个例子：int* (*func2)(int)[10]，不难分析出func2是一个返回值为int* [10]，参数是int类型的函数指针，但是数组int* [10]是不能直接做为返回类型声明的，因此会编译失败。
+	# 最后一个例子：int(* (*func3)(int))[10]，func3的参数是int类型，返回值是一个指向int[10]的指针。
+	
+	# 最后再回到signal的函数声明：
+	void(*signal(int, void (*)(int)))(int);
+	# 最里面层为：*signal(int, void (*)(int))，表示signal是个函数指针，第一个参数为int，第二个参数是返回类型为
+	# void参数类型是int的函数指针，最外层是void (int)表示signal的返回值也是一个void (int)类型的函数指针，因此上
+	# 面的定义可等价于：
+	typedef void handleFunc(int);
+	handleFunc* signal(int, handleFunc *func);
+
+注意：**SIGKILL和SIGSTOP信号不能被捕获**。
+
+	// tcp服务端 server.c
+	#include "unp.h"
+	#include <time.h>
+	
+	typedef void sigHandler(int);
+	
+	// 系统signal包装函数
+	sigHandler* signal(int signo, sigHandler *func)
+	{
+		struct sigaction act, oact;
+		act.sa_handler = func;
+		// sa_mask为阻塞信号集，表示该信号处理函数func在被调用时, 里面的信号将被阻塞递交
+		// 这里设置为空表示不阻塞任何额外信号
+		sigemptyset(&act.sa_mask);
+		act.sa_flags = 0;
+		// 由signo信号中断的系统调用将由内核自动重启, 但是SIGALRM例外
+		// 因为SIGALRM信号通常是I/O操作设置超时，这种情况下我们希望被阻塞的系统调用能被信号中断掉
+		if (signo == SIGALRM){
+		#ifdef SA_INTERRUPT
+			act.sa_flags |= SA_INTERRUPT;
+		#endif
+		} else {
+		#ifdef SA_RESTART
+			act.sa_flags |= SA_RESTART;
+		#endif
+		}
+		
+		if (sigaction(signo, &act, &oact) < 0)
+			return SIG_ERR;
+		return oact.sa_handler;
+	}
+
+	void response(int connfd)
+	{
+		char buff[MAXLINE];
+		const char *sign_str = " ==> reply from server\n";
+		size_t n;
+		
+		again:
+		while ((n=read(connfd, buff, MAXLINE)) > 0) {
+		    printf("read succ, n: %d, %s", n, buff);
+		    memcpy(buff+n-1, sign_str, strlen(sign_str)+1); 
+		    writen(connfd, buff, n+strlen(sign_str));
+		}
+		
+		printf("read socket: %d\n", n);
+		
+		if (n < 0 && errno == EINTR)
+		    goto again;
+		else if (n < 0)
+		    err_sys("socket read error");
+	}
+
+	int main(int argc, char **argv)
+	{
+		int listenfd, connfd;
+		socklen_t len;
+		struct sockaddr_in servaddr, cliaddr;
+		//char buff[MAXLINE];
+		//time_t ticks;
+		listenfd = socket(AF_INET, SOCK_STREAM, 0);
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family = AF_INET;
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		servaddr.sin_port = htons(7000);
+		bind(listenfd, (const struct servaddr*) &servaddr, sizeof(servaddr));
+		listen(listenfd, LISTENQ);
+		
+		//处理SIGCHLD信号
+		signal(SIGCHLD, sig_chld);
+		
+		char buff[MAXLINE];
+		
+		while(1) {
+		    len = sizeof(cliaddr);
+		    connfd = accept(listenfd, (struct servaddr*) &cliaddr, &len);
+		    
+		    printf("connection from %s, port %d\n",
+		        inet_ntop(AF_INET, &cliaddr.sin_addr, buff, sizeof(buff)),
+		        ntohs(cliaddr.sin_port));
+		    
+		    if (fork() == 0) {
+		        close(listenfd);
+		        response(connfd);
+		        exit(0);
+		    }
+		    close(connfd);
+		}
+		exit(0);
+	}
+
+
+注意：
+ 
+1. 如果一个信号在被阻塞期间产生了一次或多次，那么该信号在解阻塞之后通常只递交一次，即Unix信号默认是不排队的。 可以使用
+   sigprocmask函数选择性地阻塞或解阻塞一组信号，比如在一段临界区代码中防止捕获某些信号；
+
+2. 若注释掉 act.sa\_flags |= SA\_RESTART; 则客户端在终止时，服务端子进程会收到FIN导致exit，于是父进程收到SIGCHLD，而此前
+   父进程一直阻塞于慢系统调用accept，因为该信号将导致内核中断该accept系统调用(在信号处理函数的return或结尾的地方中断)，返回EINTR，而父进程并未处理这种错误，在某些系统会直接终止，而某些系统则因为accept出错提前返回将不停执行后续的fork逻辑部分。act.sa\_flags |= SA\_RESTART未注释，则被SIGCHLD信号中断的accept系统调用将被内核自动重启，从而保证进程正常运行。
