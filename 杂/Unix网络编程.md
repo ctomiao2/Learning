@@ -356,6 +356,15 @@ tcp服务端example:
 		else if (n < 0)
 		    err_sys("socket read error");
 	}
+	
+	// 信号处理函数（有问题版本）
+	void sig_chld(int signo)
+	{
+		pid_t pid;
+		int stat;
+		pid = wait(&stat);
+		return;
+	}	
 
 	int main(int argc, char **argv)
 	{
@@ -402,4 +411,51 @@ tcp服务端example:
    sigprocmask函数选择性地阻塞或解阻塞一组信号，比如在一段临界区代码中防止捕获某些信号；
 
 2. 若注释掉 act.sa\_flags |= SA\_RESTART; 则客户端在终止时，服务端子进程会收到FIN导致exit，于是父进程收到SIGCHLD，而此前
-   父进程一直阻塞于慢系统调用accept，因为该信号将导致内核中断该accept系统调用(在信号处理函数的return或结尾的地方中断)，返回EINTR，而父进程并未处理这种错误，在某些系统会直接终止，而某些系统则因为accept出错提前返回将不停执行后续的fork逻辑部分。act.sa\_flags |= SA\_RESTART未注释，则被SIGCHLD信号中断的accept系统调用将被内核自动重启，从而保证进程正常运行。
+   父进程一直阻塞于慢系统调用accept，因为该信号将导致内核中断该accept系统调用(在信号处理函数的return或结尾的地方中断)，返回EINTR，而父进程并未处理这种错误，在某些系统会直接终止，而某些系统则因为accept出错提前返回将不停执行后续的fork逻辑部分。act.sa\_flags |= SA\_RESTART未注释，则被SIGCHLD信号中断的accept系统调用将被内核自动重启，从而保证进程正常运行。但是有
+   可能某些系统并不支持重启被信号中断的系统调用，因此可移植地改法是在程序里处理被信号中断的情况：
+		
+		... // 省略
+		while(1) {
+		    len = sizeof(cliaddr);
+		    if ((connfd = accept(listenfd, (struct servaddr*) &cliaddr, &len)) < 0) {
+				if (errno == EINTR)
+					continue; // 自动重启
+				else
+					err_sys("accept error");
+			}
+		    
+		    ... //省略
+		}
+
+	对于accept、read、write、select、open之类函数可以这样处理，但connect不能重启，如果connect返回EINTR，我们不能再次调用它，否则将立即返回一个错误，当connect被一个捕获的信号中断而且不自动重启时，我们必须调用select来等待连接完成。
+
+
+**wait与waitpid：** 都可用来清理已终止子进程
+
+	#include <sys/wait.h>
+	// 均返回：若成功则为进程ID，若出错则为0或-1
+	// 如果调用wait的进程没有已终止的子进程，不过有一个或多个子进程正在执行，则阻塞到有子进程终止为止
+	pid_t wait(int *statloc);
+
+	// pid可指定等待哪个子进程，若为-1则表示等待第一个终止的进程，options允许指定附加选项，常用的是WNOHANG表示在没有已终止的子进程时不要阻塞
+	pid_t waitpid(pid_t pid, int *statloc, int options);
+
+当同时有多个客户端连接时，建立一个信号处理函数并在其中调用wait并不足以防止出现僵死进程。因为unix信号一般是不排队的，如果信号处理函数正在执行时依次收到其他子进程的信号，那么当信号处理函数执行完毕后只会再执行一次，从而可能导致产生僵死进程，正确地解决办法是使用waitpid。
+
+	void sig_chld(int signo)
+	{
+		pid_t pid;
+		int stat;
+		while ((pid = waitpid(-1, &stat, WNOHANG)) > 0)
+			printf("child %d terminated\n", pid);
+		return;
+	}
+
+使用上述信号处理函数能work的原因在于：使用了循环去逐个wait已终止的子进程，因此所有已终止的子进程都会被处理，wait能否也使用循环呢？答案当然是否定的，因为wait做不到在没有已终止的子进程时不阻塞，也就是说如果对wait使用循环那么当没有已终止的子进程时父进程会被阻塞，这显然是不行的，而waitpid的WNOHANG选项可以保证在没有已终止的子进程时不阻塞。
+
+
+**结论：**
+
+1. 当fork子进程时必须捕获SIGCHLD信号；
+2. 当捕获信号时，必须处理被中断的系统调用；
+3. SIGCHLD的信号处理函数必须正确编写，应使用waitpid函数以免留下僵死进程。
