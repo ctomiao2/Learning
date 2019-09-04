@@ -178,8 +178,8 @@ tcp客户端example:
 	    while (fgets(sendline, MAXLINE, fp) > 0){
 	        write(sockfd, sendline, strlen(sendline));
 	        size_t n;
-	        if ((n=read(sockfd, recvline, sizeof(recvline)) < 0))
-	            err_sys("read socker error\n");
+	        if ((n=read(sockfd, recvline, sizeof(recvline)) <= 0))
+	            err_quit("server termiated\n");
 	        printf("%s", recvline);
 	        //fputs(recvline, stdout);
 	    }
@@ -459,3 +459,29 @@ tcp服务端example:
 1. 当fork子进程时必须捕获SIGCHLD信号；
 2. 当捕获信号时，必须处理被中断的系统调用；
 3. SIGCHLD的信号处理函数必须正确编写，应使用waitpid函数以免留下僵死进程。
+
+
+**accept返回前连接终止：** tcp三路握手完成后tcp客户端却发送了一个RST(复位)，服务器进程调用accept的时候RST到达，POSIX指出在这种情况返回的errno必须是ECONNABORTED（但不同系统在具体实现的时候不尽相同），服务器进程遇到这种错误时就可以忽略它再次调用accept就行。
+
+**服务器进程终止：** 使用kill命令杀掉tcp服务端子进程，子进程中所有打开的描述符都被关闭，将导致向客户发送一个FIN，客户tcp响应ACK，但是按此前设计的tcp客户端str\_cli函数，这时仍然阻塞于fgets调用等待用户输入，一旦用户输入后tcp客户将把数据发送给服务器，tcp允许这么干是因为tcp客户收到FIN只是表示服务器进程已经关闭的连接的服务器端不会再往客户发送任何数据而已，但FIN的接收并没有告知tcp服务器进程已经终止（本例中确实是终止了），因为tcp客户认为服务端进程仍然可以接收数据。**当tcp服务端接收到来自客户的数据时，因为该客户关联的套接字进程已经终止，于是相应一个RST。但是客户端看不到这个RST**，因为此时客户端正阻塞于read调用，而根据之前接收的FIN，read调用立即返回0(表示EOF)，于是执行err_quit函数终止客户端。这个例子问题在于tcp客户端在应对两个描述符————套接字和用户输入，它不能单纯地阻塞在这两个源中某个特定源的输入上，也就是说即使服务端已经发送FIN给客户端了，但客户端可能正阻塞于用户输入导致不能立马获知已收到FIN。
+
+**SIGPIPE:** 向某个已接收到RST的套接字执行写操作时，内核向该进程发送一个SIGPIPE信号，该信号的默认行为是终止进程，因此进程必须捕获它或者设置忽略该信号以免进程被不情愿地终止。 但无论该进程是捕获了该信号并从其信号处理函数返回还是简单地忽略该信号，写操作都将返回EPIPE错误。 **写一个已接收了FIN的套接字将引发服务端发送RST, 写一个已接收了RST的套接字将引发SIGPIPE信号**。
+
+	#include "unp.h"
+	
+	void str_cli(FILE *fp, int sockfd)
+	{
+	    char recvline[MAXLINE], sendline[MAXLINE];
+	    while (fgets(sendline, MAXLINE, fp) > 0){
+			write(sockfd, sendline, 1);
+			sleep(1);
+	        write(sockfd, sendline+1, strlen(sendline)-1);
+	        size_t n;
+	        if ((n=read(sockfd, recvline, sizeof(recvline)) <= 0))
+	            err_quit("server termiated\n");
+	        printf("%s", recvline);
+	        //fputs(recvline, stdout);
+	    }
+	}
+
+客户端正阻塞于fgets，杀掉服务端子进程，然后客户端键入一行文本，第一次write会引发RST, 第二次写会引发SIGPIPE信号，由于进程并未捕获该信号，因此进程将被终止。可行的做法是直接将SIGPIPE设置SIG_IGN，然后在write后处理返回的EPIPE错误。
