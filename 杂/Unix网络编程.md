@@ -553,3 +553,111 @@ maxfdp1指定待测试的描述符个数，其值为待测试的最大描述符�
 - 其上有一个套接字错误待处理，对这样的套接字写将不阻塞且返回-1，同时errno被设置成确切的错误条件。
 
 3）如果一个套接字存在带外数据或者仍然处于带外标记，那么有异常条件待处理。
+
+**注意：** **当select函数返回时将修改由指针readset、writeset、exceptset所指向的描述符集，描述符集内任何与未就绪描述符对应的位都被清为0，因此每次重新调用select函数时都得再次把所有描述符集内关心的为重置为1**。
+
+
+**改进版的str_cli：**
+
+	#include "unp.h"
+	
+	void str_cli(FILE *fp, int sockfd)
+	{
+		int madfdp1;
+		fd_set rset;
+	    char recvline[MAXLINE], sendline[MAXLINE];
+	    FD_ZERO(&rset);
+		while (true){
+			FD_SET(fileno(fp), &rset);
+			FD_SET(sockfd, &rset);
+			maxfdp1 = max(fileno(fp), sockfd) + 1;
+			select(maxfdp1, &rset, NULL, NULL, NULL);
+			
+			if (FD_ISSET(sockfd, &rset)) { /* socket is readable */
+				if (readline(sockfd, recvline, MAXLINE) == 0)
+					err_quit("str_cli: server terminated prematurely");
+				fputs(recvline, stdout);
+			}
+			
+			if (FD_ISSET(fileno(fp), &rset)) { /* input is readable */
+				if (fgets(sendline, MAXLINE, fp) == NULL)
+					return;
+				writen(sockfd, sendline, strlen(sendline));
+			}
+	    }
+	}
+
+改版本str_cli仍然有问题，输入端终止后会立即回到main函数执行exit终止进程，但这时可能仍然有请求正在途中。
+
+**shutdown：**
+
+	#include <sys/socket.h>
+	
+	int shutdown(int sockfd, int howto);
+
+howto:
+
+- SHUT_RD：关闭套接字读，丢掉套接字接收缓冲区中的数据，对一个tcp套接字而言，对端发来的所有数据都被确认然后丢弃。
+- SHUT_WR：关闭套接字写，套接字发送缓冲区的数据会被立即发送，后跟tcp的正常连接终止序列，无视tcp套接字的引用计数。
+- SHUT_RDWR：读写都关闭，等价于关闭两次SHUT_RD、SHUT_WR
+
+**select服务端程序：**
+
+	#include "unp.h"
+	
+	int main(int argc, char **argv)
+	{
+		int listenfd, connfd, i, maxi, maxfd;
+		int nready, client[FD_SETSIZE];
+		fd_set rset, allset;
+		struct sockaddr_in servaddr, cliaddr;
+		listenfd = socket(AF_INET, SOCK_STREAM, 0);
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family = AF_INET;
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		servaddr.sin_port = htons(7000);
+		bind(listenfd, (const struct servaddr*)&serveraddr, sizeof(servaddr));
+		listen(listenfd, LISTENQ);
+		char buff[MAXLINE];
+		maxfd = listenfd;
+		maxi = -1;
+		for (i = 0; i < FD_SETSIZE; i++)
+			client[i] = -1;
+		FD_ZERO(&allset);
+		FD_SET(listenfd, &allset);
+		while (1) {
+			rset = allset;
+			nready = select(maxfd+1, &rset, NULL, NULL, NULL);
+			if (FD_ISSET(listenfd, &rset)) {
+				size_t clilen = sizeof(cliaddr);
+				connfd = accept(listenfd, (SA*)&cliaddr, &clilen);
+				for (i=0; i < FD_SETSIZE; i++) {
+					if (client[i] < 0) {
+						client[i] = connfd;
+						break;
+					}
+				}
+				if (i == FD_SETSIZE)
+					err_quit("too many clients");
+				FD_SET(connfd, &allset);
+				if (connfd > maxfd) maxfd = connfd;
+				if (i > maxi) maxi = i;
+				if (--nready <= 0) continue;
+			}
+			for (i=0; i <= maxi; ++i) {
+				int sockfd, n;
+				if ((sockfd = client[i]) < 0) continue;
+				if (FD_ISSET(sockfd, &rset)) {
+					if ((n = read(sockfd, buff, MAXLINE) == 0) {
+						close(sockfd);
+						FD_CLR(sockfd, &allset);
+						client[i] = -1;
+					} else {
+						writen(sockfd, buff, n);
+					}
+					if (--nready <= 0)
+						break;
+				}
+			}
+		}
+	}
