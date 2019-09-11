@@ -648,7 +648,7 @@ howto:
 				int sockfd, n;
 				if ((sockfd = client[i]) < 0) continue;
 				if (FD_ISSET(sockfd, &rset)) {
-					if ((n = read(sockfd, buff, MAXLINE) == 0) {
+					if ((n = readline(sockfd, buff, MAXLINE) == 0) {
 						close(sockfd);
 						FD_CLR(sockfd, &allset);
 						client[i] = -1;
@@ -661,3 +661,70 @@ howto:
 			}
 		}
 	}
+
+该服务端程序仍然不能避免拒绝服务攻击，客户端可以恶意发送一个字节的数据（不是换行符），那么服务端将调用readline读入这个单字节数据，由于readline需要读到换行符或EOF才返回，因此readline一直阻塞，由于服务端使用的是单进程单线程模型，因此所有其他客户端服务都将不可用。解决办法包括：（1）使用非阻塞式I/O；（2）让每个客户由单独的控制线程提供服务（如创建一个子进程或一个线程来服务每个客户）；（3）对I/O操作设置一个超时。 当然，若将readline换成read也不会存在拒绝服务攻击的问题了。
+
+
+**pselect：**
+
+	#include <sys/select.h>
+	#include <signal.h>
+	#include <time.h>
+	
+	int pselect(int maxfdp1, fd_set *readset, fd_set *writeset, fd_set *exceptset, const struct timespec *timeout, const.sigset_t *sigmask);
+	
+**sigprocmask：**
+
+	int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+
+sigprocmask用于设置和获取信号掩码（signal mask， 被当前进程屏蔽的信号集）。 若oldset不是NULL，则旧的signal mask被保存到oldset，若set为NULL则signal mask不会有任何改变（即how被忽略），但当前的signal mask仍然被保存到oldset（若oldset不为NULL）。 how的选项如下：
+
+- SIG_BLOCK： 当前signal mask和参数set里的信号都被屏蔽，即增量设置；
+- SIG_UNBLOCK：解除屏蔽参数set里的信号，允许set里的信号是非屏蔽的；
+- SIG_SETMASK：将signal mask设置成参数set，即全量设置。
+
+	
+若sigmask为NULL，则pselect与select等价，否则pselect等价于如下**原子**执行如下代码段：
+
+	sigset_t oldmask, sigmask;
+	sigprocmask(SIG_SETMASK, &sigmask, &oldmask);
+	select(...);
+	sigprocmask(SIG_SETMASK, &oldmask, NULL);
+即pselect时会将当前的signal mask替换成参数sigmask，调用完毕后再还原。
+
+
+考虑这样一个程序段：
+	
+	static volatile int intr_flag = 0;
+	
+	void handle_intr() {
+		.....  // do something
+		intr_flag = 0;
+	}
+	
+	void sig_handler() {
+		intr_flag = 1;
+	}
+
+	sa.sa_handler = sig_handler;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGINT, &sa, NULL);
+
+	sigset_t new, old, zero;
+	sigemptyset(&zero);
+	sigemptyset(&new);
+	sigaddset(&new, SIGINT);
+	sigprocmask(SIG_BLOCK, &new, old); //block SIGINT
+	/*********** NOTE-1 ***********/
+	if (intr_flag)
+		handle_intr(); // handle the signal
+	if ((nready = pselect(maxfdp1, readset, writeset, exceptset, timeout, &zero)) < 0) {
+		if (errno == EINTR) {
+			if (intr_flag)
+				handle_intr();
+		}
+	}
+
+sigprocmask函数会屏蔽掉SIGINT信号，pselect的sigmask是空，即不屏蔽任何信号，因此执行到pselect时SIGINT信号又再次被解除屏蔽。 这段代码的意思是直到pselect调用前SIGINT一直被屏蔽，有几种情况：若在sigprocmask前收到SIGINT信号则会在NOTE-1后面两行将执行handle\_intr；若是在sigprocmask之后pselect之前收到SIGINT信号，则将被忽略；若在pselect调用后收到SIGINT则sig\_handler将被执行，且pselect被打断返回EINTR错误从而执行后面的handle_intr。
+	
