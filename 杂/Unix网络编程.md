@@ -727,4 +727,272 @@ sigprocmask用于设置和获取信号掩码（signal mask， 被当前进程屏
 	}
 
 sigprocmask函数会屏蔽掉SIGINT信号，pselect的sigmask是空，即不屏蔽任何信号，因此执行到pselect时SIGINT信号又再次被解除屏蔽。 这段代码的意思是直到pselect调用前SIGINT一直被屏蔽，有几种情况：若在sigprocmask前收到SIGINT信号则会在NOTE-1后面两行将执行handle\_intr；若是在sigprocmask之后pselect之前收到SIGINT信号，则将被忽略；若在pselect调用后收到SIGINT则sig\_handler将被执行，且pselect被打断返回EINTR错误从而执行后面的handle_intr。
+
+**poll**：
 	
+	#include <poll.h>
+	// 返回： 若有就绪描述符则为其数目，若超时则为0，若出错则为-1
+	int poll(struct pollfd *fdarray, unsigned long nfds, int timeout);
+	
+	struct pollfd {
+		int fd;  /* descriptor to check */
+		short events; /* events of interest on fd */
+		short revents;  /* events that occurred on fd */
+	}
+
+要测试的条件由events成员指定，函数在相应的revents成员中返回该描述符的状态。events和revents常值:
+
+- POLLIN：普通或优先级带数据可读；
+- POLLRDNORM：普通数据可读；
+- POLLRDBAND：优先级带数据可读；
+- POLLPRI：高优先级数据可读；
+- POLLOUT：普通数据可写；
+- POLLWRNORM：普通数据可写；
+- POLLWRBAND：优先级带数据可写；
+- POLLERR：发生错误；
+- POLLHUP：发生挂起；
+- POLLNVAL：描述符不是一个打开的文件
+
+其中后三个不可作为events值。 
+
+- 所有正规tcp数据与udp数据都被认为是普通数据；
+- tcp带外数据被认为是优先级带数据；
+- tcp的读半部关闭时（即收到了对端的FIN），被认为是普通数据，随后的读操作将返回0；
+- tcp连接存在错误既可被认为是普通数据也可认为是发生错误POLLERR，在随后的读操作将返回-1，并把errno设置成合适的值；
+- 在监听套接字上有新的连接可用既可被认为是普通数据也可认为是优先级数据，大多数实现视为普通数据；
+- 非阻塞式套接字connect完成被认为是可写。
+
+timeout: 0立即返回不阻塞；>0等待指定毫秒数；INFTIM永远等待。
+
+当发生错误时poll立即返回-1，若定时器到时之前没有任何描述符就绪则返回0，否则返回已就绪的描述符数量，即revents中非0的数量。若对某个pollfd不感兴趣则可将该pollfd的fd设为-1。 使用poll的tcp服务端程序：
+
+	int main(int argc, char **argv)
+	{
+	    int i, maxi, listenfd, connfd, sockfd;
+	    int nready, n;
+	    char buf[MAXLINE];
+	    socklen_t clilen;
+	    const int OPEN_MAX = 1024;
+	    struct pollfd client[OPEN_MAX];
+	    struct sockaddr_in cliaddr, servaddr;
+	    
+	    listenfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	
+	    bzero(&servaddr, sizeof(servaddr));
+	    servaddr.sin_family = AF_INET;
+	    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	    servaddr.sin_port = htons(7000);
+	
+	    bind(listenfd, (SA*) &servaddr, sizeof(servaddr));
+	
+	    listen(listenfd, LISTENQ);
+	
+	    client[0].fd = listenfd;
+	    client[0].events = POLLRDNORM;
+	    for (i = 1; i < OPEN_MAX; i++)
+	        client[i].fd = -1;
+	    maxi = 0;
+	
+	    while (1) {
+	        nready = poll(client, maxi + 1, INFTIM);
+	        
+	        /* check listenfd */
+	        if (client[0].revents & POLLRDNORM) {
+	            clilen = sizeof(cliaddr);
+	            connfd = accept(listenfd, (SA*) &cliaddr, &clilen);
+	            for (i=1; i < OPEN_MAX; ++i) {
+	                if (client[i].fd < 0) {
+	                    client[i].fd = connfd;
+	                    client[i].events = POLLRDNORM;
+	                    if (i > maxi) maxi = i;
+	                    break;
+	                }
+	            }
+	            
+	            if (i == OPEN_MAX)
+	                err_quit("too many clients");
+	
+	            if (--nready <= 0) continue;
+	    
+	        }
+	        
+	        /* check client connfd */
+	        for (i=1; i <= maxi; ++i) {
+	            if ((sockfd = client[i].fd) < 0)
+	                continue;
+	            if (client[i].revents & (POLLRDNORM | POLLERR)) {
+	                if ((n = read(sockfd, buf, MAXLINE)) < 0) {
+	                    if (errno == ECONNRESET) {
+	                        close(sockfd);
+	                        client[i].fd = -1;
+	                    } else {
+	                        err_sys("read error");
+	                    }
+	                } else if (n == 0) {
+	                    close(sockfd);
+	                    client[i].fd = -1;
+	                } else {
+	                    writen(sockfd, buf, n);
+	                }
+	
+	                if (--nready <= 0)
+	                    break;
+	            }
+	
+	        }
+	    }
+	}
+
+
+
+**epoll**：
+	
+	// 创建一个epoll句柄, size表示监听数目, size并不是限制epoll所能监听的描述符最大个数而是对内核分配数据结构的建议值
+	int epoll_create(int size)
+	
+	// epfd即为epoll_create的返回值, fd为需要监听的文件描述符
+	// op取值：EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD，分别表示添加、删除和修改对fd的监听事件
+	// epoll_event告诉内核监听什么事件
+	int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+	
+	// 等待epfd上的io事件，最多返回maxevents个事件，events用来保存从内核得到的事件集合，maxevents告知内核这个events有多大，不能大于epoll_create的size，timeout为超时时间（0立即返回，-1永久阻塞），该函数返回需处理的事件数目，如返回0则表示超时。
+	int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
+
+	struct epoll_event {
+		__uint32_t events;  /* epoll events */
+		epoll_data_t data;  /* user data variable */
+	}
+	
+	events可取以下几个宏：
+	EPOLLIN：普通数据可读，包括对端SOCKET正常关闭；
+	EPOLLOUT：普通数据可写；
+	EPOLLPRI：优先级带数据可读；
+	EPOLLERR：文件描述符发生错误；
+	EPOLLHUP：文件描述符被挂断；
+	EPOLLET：将EPOLL设为边缘触发（Edge Triggered模式)
+	EPOLLONESHOT：只监听一次事件，当监听完这次事件之后，如果还需要继续监听这个socket需再次把它加入到EPOLL队列。
+
+epoll没有描述符限制，使用一个文件描述符管理多个描述符。epoll对文件描述符的操作有两种模式：
+
+- LT模式（level trigger)：当epoll\_wait检测到描述符事件发生并将此事件通知应用程序，应用程序可以不立即处理该事件，下次调用epoll_wait时会再次响应应用程序并通知此事件；该模式为默认模式，同时支持block和no-block socket。
+
+- ET模式（edge trigger)：当epoll\_wait检测到描述符事件发生并将此事件通知应用程序，应用程序必须立即处理该事件。如果不处理，下次调用epoll\_wait时，不会再次响应应用程序并通知此事件。该模式是高速工作方式，只支持no-block socket。在这种模式下，当描述符从未就绪变为就绪时，内核通过epoll告诉你。然后它会假设你知道文件描述符已经就绪，并且不会再为那个文件描述符发送更多的就绪通知，直到你做了某些操作导致那个文件描述符不再为就绪状态了(比如，你在发送，接收或者接收请求，或者发送接收的数据少于一定量时导致了一个EWOULDBLOCK 错误）
+
+使用epoll的tcp服务端程序：
+
+
+	#include "unp.h"
+	#include <sys/epoll.h>
+	
+	#define EPOLLEVENTS 100
+	
+	void epoll_ctrl_event(int epollfd, int fd, int state, int op) {
+	    struct epoll_event event;
+	    event.events = state;
+	    event.data.fd = fd;
+	    epoll_ctl(epollfd, op, fd, &event);
+	}
+	
+	void add_event(int epollfd, int fd, int state) {
+	    epoll_ctrl_event(epollfd, fd, state, EPOLL_CTL_ADD);
+	}
+	
+	void delete_event(int epollfd, int fd, int state) {
+	    epoll_ctrl_event(epollfd, fd, state, EPOLL_CTL_DEL);
+	}
+	
+	void modify_event(int epollfd, int fd, int state) {
+	    epoll_ctrl_event(epollfd, fd, state, EPOLL_CTL_MOD);
+	}
+	
+	void handle_accept(int epollfd, int listenfd) {
+	    printf("handle_accept...\n");
+	    int connfd;
+	    struct sockaddr_in cliaddr;
+	    socklen_t clilen = sizeof(cliaddr);
+	    if ((connfd = accept(listenfd, (SA*) &cliaddr, &clilen)) < 0) {
+	        err_quit("accept error");
+	    } else {
+	        add_event(epollfd, connfd, EPOLLIN);
+	    }
+	}
+	
+	void do_read(int epollfd, int fd, char *buf) {
+	    printf("do_read, %s\n", buf);
+	    int nread;
+	    nread = read(fd, buf, MAXLINE);
+	    if (nread == -1) {
+	        close(fd);
+	        delete_event(epollfd, fd, EPOLLIN);
+	        err_quit("read error");
+	    } else if (nread == 0) {
+	        close(fd);
+	        delete_event(epollfd, fd, EPOLLIN);
+	    } else {
+	        // 修改描述符对应事件，改读为写
+	        modify_event(epollfd, fd, EPOLLOUT);
+	    }
+	}
+	
+	void do_write(int epollfd, int fd, char *buf) {
+	    printf("do_write, %s\n", buf);
+	    int nwrite;
+	    nwrite = write(fd, buf, strlen(buf));
+	    if (nwrite == -1) {
+	        close(fd);
+	        delete_event(epollfd, fd, EPOLLOUT);
+	        err_quit("write error");
+	    } else {
+	        // 改写为读
+	        modify_event(epollfd, fd, EPOLLIN);
+	    }
+	}
+	
+	void handle_events(int epollfd, struct epoll_event *events, int nready, int listenfd, char *buf)
+	{
+	    for (int i=0; i < nready; ++i) {
+	        int fd = events[i].data.fd;
+	        if ((fd == listenfd) && (events[i].events & EPOLLIN))
+	            handle_accept(epollfd, listenfd);
+	        else if (events[i].events & EPOLLIN)
+	            do_read(epollfd, fd, buf);
+	        else if (events[i].events & EPOLLOUT)
+	            do_write(epollfd, fd, buf);
+	    }
+	}
+	
+	int main(int argc, char **argv)
+	{
+	    int listenfd;
+	    char buf[MAXLINE];
+	    struct epoll_event events[EPOLLEVENTS];
+	    struct sockaddr_in servaddr;
+	    
+	    listenfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	
+	    bzero(&servaddr, sizeof(servaddr));
+	    servaddr.sin_family = AF_INET;
+	    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	    servaddr.sin_port = htons(7000);
+	
+	    bind(listenfd, (SA*) &servaddr, sizeof(servaddr));
+	    
+	    listen(listenfd, LISTENQ);
+	
+	    // create epoll fd
+	    int epollfd = epoll_create(1000);
+	    
+	    add_event(epollfd, listenfd, EPOLLIN);
+	
+	    while (1) {
+	        // 返回准备好的描述符
+	        printf("begin epoll_wait...\n");
+	        int ret = epoll_wait(epollfd, events, EPOLLEVENTS, -1);        
+	        printf("ret: %d\n", ret);
+	        handle_events(epollfd, events, ret, listenfd, buf);
+	    }
+	    close(epollfd);
+	}
+
+
+通过比较不难发现：select/poll在有文件描述符就绪时都要遍历一遍所有文件描述符以确定是哪些描述符就绪，当文件描述符较多时比较低效，而epoll则是实现通过epoll_ctl来注册一个文件描述符，一旦某个文件描述符就绪内核就会激活这个文件描述符事件，应用程序就能立马直到是哪些文件描述符已就绪，而无需遍历其他未就绪的文件描述符。
