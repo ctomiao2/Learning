@@ -996,3 +996,141 @@ epoll没有描述符限制，使用一个文件描述符管理多个描述符。
 
 
 通过比较不难发现：select/poll在有文件描述符就绪时都要遍历一遍所有文件描述符以确定是哪些描述符就绪，当文件描述符较多时比较低效，而epoll则是实现通过epoll_ctl来注册一个文件描述符，一旦某个文件描述符就绪内核就会激活这个文件描述符事件，应用程序就能立马直到是哪些文件描述符已就绪，而无需遍历其他未就绪的文件描述符。
+
+## UDP ##
+
+不需要建立连接，只需调用sendto发送数据报，调用recvfrom接收数据报。
+
+	#include <sys/socket.h>
+	
+	ssize_t recvfrom(int sockfd, void *buff, size_t nbytes, int flags, 
+		struct sockaddr *from, socklen_t *addrlen);
+	
+	ssize_t sendto(int sockfd, const void *buff, size_t nbytes, int flags,
+		const struct sockaddr *to, socklen_t *addrlen);
+
+前三个参数sockfd、buff、nbytes等同于read和write函数的三个参数，后两个参数类似于accept和connect的最后两个参数。若recvfrom的from为NULL，则addrlen也必须为NULL，表示不关心发送者的协议地址。
+
+udp服务端程序：
+
+	#include "unp.h"
+
+	int main(int argc, char **argv)
+	{
+	    int sockfd;
+	    struct sockaddr_in servaddr, cliaddr;
+	    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	    bzero(&servaddr, sizeof(servaddr));
+	    servaddr.sin_family = AF_INET;
+	    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	    servaddr.sin_port = htons(7000);
+	    bind(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
+	
+	    char buf[MAXLINE];
+	    socklen_t len = sizeof(cliaddr);
+	
+	    while (1) {
+	        int n = recvfrom(sockfd, buf, MAXLINE, 0, (struct sockaddr*) &cliaddr, &len);
+	        printf("recv from client: %s", buf);
+	        sendto(sockfd, buf, n, 0, (struct sockaddr*) &cliaddr, len);
+	    }
+	}
+
+
+udp客户端程序：
+
+	#include "unp.h"
+
+	int main(int argc, char **argv)
+	{
+	    int sockfd;
+	    struct sockaddr_in servaddr;
+	
+	    if (argc != 2)
+	        err_quit("missing <IPaddress>");
+	
+	    bzero(&servaddr, sizeof(servaddr));
+	    servaddr.sin_family = AF_INET;
+	    servaddr.sin_port = htons(7000);
+	    inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+	
+	    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	    socklen_t len;
+	    char sendline[MAXLINE], recvline[MAXLINE+1];
+	    while (fgets(sendline, MAXLINE, stdin) != NULL) {
+	        sendto(sockfd, sendline, strlen(sendline), 0, (struct sockaddr*) &servaddr, sizeof(servaddr));
+			struct sockaddr *preply_addr = (struct sockaddr*) malloc(sizeof(servaddr));
+	        int n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL);
+			 if (len != sizeof(servaddr) || memcmp((const void*)&servaddr, (const void*)preply_addr, len) != 0) { 
+				printf("reply from %s\n", sock_ntop(preply_addr, len));
+ 				continue;
+			}
+	        recvline[n] = '\0';
+	        fputs(recvline, stdout);
+	    }
+	
+	    exit(0);
+	}
+
+使用connect：不使用connect时，sendto在发送数据报前会先连接服务端（但不会有三次握手），发送完数据报后会再断开连接（也不会有三次挥手），下次发送数据报时重复同样的步骤。 不使用显示connect服务端发生错误时客户端不会收到通知，另外使用显示connect可以减少通信时长。
+
+	#include "unp.h"
+	
+	int main(int argc, char **argv)
+	{
+	    int sockfd;
+	    struct sockaddr_in servaddr;
+	
+	    if (argc != 2)
+	        err_quit("missing <IPaddress>");
+	
+	    bzero(&servaddr, sizeof(servaddr));
+	    servaddr.sin_family = AF_INET;
+	    servaddr.sin_port = htons(7000);
+	    inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+	
+	    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	    
+	    char sendline[MAXLINE], recvline[MAXLINE+1];
+	    socklen_t len;
+	
+	    if (connect(sockfd, (const struct sockaddr*) &servaddr, sizeof(servaddr)) < 0)
+	        err_quit("connect error");
+	
+	    while (fgets(sendline, MAXLINE, stdin) != NULL) {
+	        write(sockfd, sendline, strlen(sendline));
+	        int n = read(sockfd, recvline, MAXLINE);
+	        recvline[n] = '\0';
+	        fputs(recvline, stdout);
+	    }
+	
+	    exit(0);
+	}
+
+udp的connect无需三次握手，只是一个本地操作，只保存对端的ip地址和端口号。因此当传的服务端地址不对时connect并不会像tcp一样立即返回错误，而是在write后才会返回错误。给一个未绑定端口号的udp套接字调用connect后同时也给该套接字指派一个临时端口。（tcp和udp套接字可共用一个端口，两种端口是独立的）
+
+**udp无流量控制：** 让udp客户端使用for循环调用2000次sendto，最终服务端会丢失很多udp包，实测发现只收到400多条，丢失率大约75%，可以用netstat -s -p udp查看udp接收情况。 udp给某个特定套接字排队的UDP数据报数目受限于该套接字接收缓冲区的大小。可以使用SO_RCVBUF套接字选项修改该值：
+
+	int n = 256 * 1024;
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &n, sizeof(n))
+
+设置后上段例子中服务端可以接收更多的udp数据报，不过由于套接字缓冲区存在最大限制，仍然不能从根本上解决问题。
+
+
+**名字与地址转换：**
+
+	#include <netdb.h>
+	
+	// 只能查ipv4地址
+	struct hostent* gethostbyname(const char *hostname);
+	// 由一个二进制ip地址找到对应的主机名
+	struct hostent* gethostbyaddr(const char *addr, socklen_t len, int family);
+
+	struct hostent {
+		char *h_name;  // official name of host
+		char **h_aliased;  // alias names pointer
+		int h_addrtype;  // host address type: AF_INET
+		int h_length;  // length of address: 4
+		char **h_addr_list;  // ptr to array of ptrs with ipv4 addrs
+	}
+	
