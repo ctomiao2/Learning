@@ -6,6 +6,18 @@ void err_quit(const char *s) {
     exit(1);
 }
 
+IUINT32 iclock()
+{
+    long s, u;
+    IINT64 value;
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    s = time.tv_sec;
+    u = time.tv_usec;
+    value = ((IINT64)s) * 1000 + (u / 1000);
+    return (IUINT32)(value & 0xfffffffful);
+}
+
 /* decode 8 bits unsigned int */
 static inline const char *ikcp_decode8u(const char *p, unsigned char *c)
 {

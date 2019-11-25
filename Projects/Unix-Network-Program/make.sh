@@ -1,10 +1,10 @@
 #!/bin/bash
 # build client.c
-cd ./cli_dir
+cd ./lib
+cmake . & make
+cd ../cli_dir
 cmake . & make
 cd ../srv_dir
-cmake . & make
-cd ../lib
 cmake . & make
 cd ../
 g++ -g -w -o client cli_dir/libcli.a lib/libutils.a -std=c++11 -lpthread

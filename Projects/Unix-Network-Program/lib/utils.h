@@ -7,17 +7,7 @@
 #define LISTENQ 100
 
 
-inline IUINT32 iclock()
-{
-    long s, u;
-    IINT64 value;
-    struct timeval time;
-    gettimeofday(&time, NULL);
-    s = time.tv_sec;
-    u = time.tv_usec;
-    value = ((IINT64)s) * 1000 + (u / 1000);
-    return (IUINT32)(value & 0xfffffffful);
-}
+IUINT32 iclock();
 
 void err_quit(const char * s);
 

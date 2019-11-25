@@ -26,7 +26,8 @@ void* tick_kcp_update(void* arg)
         *val_list = NULL;
         int n;
         n = unordered_map_items(kcp_map, key_list, val_list);
-        for (int i = 0; i < n; ++i){
+        int i;
+        for (i = 0; i < n; ++i){
             ikcpcb* kcp = (ikcpcb*) ((*val_list)[i]);
             ikcp_update(kcp, iclock());
         }
@@ -155,7 +156,8 @@ again:
             int hr = ikcp_recv(kcp, buff, MAXLINE);
             if (hr < 0) break;
             printf("recv data: len=%d, ", hr);
-            for (int i = 0; i < hr; ++i) printf("%c", buff[i]);
+            int i;
+            for (i = 0; i < hr; ++i) printf("%c", buff[i]);
             printf("\n");
             //memcpy(buff + hr, sign_str, strlen(sign_str) + 1); 
             ikcp_send(kcp, buff, hr);
@@ -176,7 +178,8 @@ again:
         *val_list = NULL;
         int n;
         n = unordered_map_items(kcp_map, key_list, val_list);
-        for (int i = 0; i < n; ++i){
+        int i;
+        for (i = 0; i < n; ++i){
             ikcpcb* kcp = (ikcpcb*) ((*val_list)[i]);
             ikcp_release(kcp);
         }

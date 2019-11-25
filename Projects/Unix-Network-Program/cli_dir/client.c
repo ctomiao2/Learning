@@ -20,7 +20,8 @@ void fill_recv_stats(const char *recvline, int n, const char* output_filename)
     int num = 0;
     long long int t = iclock();
     FILE *fp = fopen(output_filename, "a+");
-    for (int i = 0; i < n; ++i) {
+    int i = 0;
+    for (i = 0; i < n; ++i) {
         if (*(recvline+i) == '\n') {
             if (num > 0){ 
                 //recv_stats[num] = t;
@@ -49,7 +50,8 @@ void* tcp_simulate_send_message(void *arg) {
     printf("\ntcp start send message, MAX_LOOP=%d...\n", MAX_LOOP);
     
     FILE *fp = fopen("tcp_snd_stats.dat", "a+");
-    for (int i = 0; i < MAX_LOOP; ++i) {
+    int i = 0;
+    for (i = 0; i < MAX_LOOP; ++i) {
         sprintf(msg, "%d\n", i + 1);
         //for (int j=0; j < 10; ++j) printf("%d", msg[i]);
         //printf("\n");
@@ -128,7 +130,8 @@ void *kcp_simulate_send_message(void *arg)
     //memset(recv_stats, 0, 4096);
     printf("\nkcp start send message...\n");
     FILE *fp = fopen("kcp_snd_stats.dat", "a+");
-    for (int i = 0; i < MAX_LOOP; ++i){
+    int i;
+    for (i = 0; i < MAX_LOOP; ++i){
         sprintf(msg, "%d", i+1);
         long long int t = iclock();
         fprintf(fp, "%d:%lld\n", i+1, t);
@@ -193,7 +196,8 @@ void kcp_cli(const char* srv_addr)
             if (hr < 0) break;
             //recved = 1;
             printf("recv data: ");
-            for (int i = 0; i < hr; ++i) printf("%c", recvline[i]);
+            int i;
+            for (i = 0; i < hr; ++i) printf("%c", recvline[i]);
             fill_recv_stats(recvline, hr, "kcp_rcv_stats.dat");
             printf("\n");
         }
