@@ -84,6 +84,9 @@ void tcp_cli(const char* srv_addr)
     if (connect(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr)) < 0)
         err_quit("connect error");
     
+    remove("tcp_snd_stats.dat");
+    remove("tcp_rcv_stats.dat");
+
     pthread_t send_msg_tid;
     pthread_create(&send_msg_tid, NULL, tcp_simulate_send_message, sockfd);
 
@@ -142,6 +145,7 @@ void *kcp_simulate_send_message(void *arg)
     }
     fclose(fp);
     printf("\nkcp finish send message...\n");
+    while (1) usleep(100000);
 }
 
 void kcp_cli(const char* srv_addr)
@@ -170,12 +174,15 @@ void kcp_cli(const char* srv_addr)
     kcp->rx_minrto = 20;
     kcp->fastresend = 1;
     
+    remove("kcp_snd_stats.dat");
+    remove("kcp_rcv_stats.dat");
+
     pthread_t send_msg_tid;
     pthread_create(&send_msg_tid, NULL, kcp_simulate_send_message, kcp);
 
     pthread_t kcp_update_tid;
     pthread_create(&kcp_update_tid, NULL, tick_kcp_update, kcp);
-
+    
     while (1){
 
         if ((n=recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL)) < 0){
