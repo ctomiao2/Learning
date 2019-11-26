@@ -54,9 +54,13 @@ int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
 {
     struct KcpUserData* user_data = (struct KcpUserData*) user;
     //printf("udp_output: connfd=%d, size=%d,", user_data->listenfd, len);
-    //print_decode_kcp_str(buf, len);
+    print_decode_kcp_str(buf, len);
     // send to client
-    sendto(user_data->listenfd, buf, len, 0, (struct sockaddr*) &user_data->cliaddr, user_data->cliaddr_len);
+    if (rand() % 2 == 0) {
+        sendto(user_data->listenfd, buf, len, 0, (struct sockaddr*) &user_data->cliaddr, user_data->cliaddr_len);
+    } else {
+        printf("loss... \n");
+    }
 }
 
 void tcp_srv()
