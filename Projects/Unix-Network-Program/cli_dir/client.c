@@ -62,6 +62,7 @@ void* tcp_simulate_send_message(void *arg) {
     }
     fclose(fp);
     printf("\ntcp finish send message...\n");
+    while (1) usleep(100000);
 }
 
 void tcp_cli(const char* srv_addr)
