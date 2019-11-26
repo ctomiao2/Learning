@@ -90,6 +90,6 @@ void print_decode_kcp_str(const char *s, int size) {
     else if (cmd == 84)
         cmd_str = "CMD_TELL_WINDOW";
 
-    printf("conv: %d, cmd: %s, frg: %d, wnd: %d, ts: %d, sn: %d, una: %d, len: %d, data: %s\n", 
+    printf("conv: %d, cmd: %s, frg: %d, wnd: %d, ts: %lld, sn: %d, una: %d, len: %d, data: %s\n", 
         conv, cmd_str, frg, wnd, ts, sn, una, len, data);
 }

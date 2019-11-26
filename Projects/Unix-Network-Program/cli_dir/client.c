@@ -15,6 +15,8 @@ static int MAX_LOOP = 200;
 // 记录序号收到的时间
 //static long long int recv_stats[4096];
 
+pthread_mutex_t lock;
+
 void fill_recv_stats(const char *recvline, int n, const char* output_filename)
 {
     int num = 0;
@@ -121,7 +123,9 @@ void* tick_kcp_update(void *arg)
     ikcpcb *kcp = (ikcpcb*) arg;
     while (1) {
         usleep(20000);
+        pthread_mutex_lock(&lock);
         ikcp_update(kcp, iclock());
+        pthread_mutex_unlock(&lock);
     }
 
     return NULL;
@@ -139,8 +143,14 @@ void *kcp_simulate_send_message(void *arg)
         sprintf(msg, "%d", i+1);
         long long int t = iclock();
         fprintf(fp, "%d:%lld\n", i+1, t);
+        
+        pthread_mutex_lock(&lock);
+
         ikcp_send(kcp, msg, strlen(msg));
         ikcp_update(kcp, t);
+
+        pthread_mutex_unlock(&lock);
+
         memset(msg, 0, 10);
         usleep(20000);
     }
@@ -167,6 +177,8 @@ void kcp_cli(const char* srv_addr)
     user->servaddr = servaddr;
     user->sockfd = sockfd;
     
+    pthread_mutex_init(&lock, NULL);
+
     IUINT32 uid = (IUINT32) guid();
     ikcpcb *kcp = ikcp_create(uid, (void*)user);
     kcp->output = udp_output;
@@ -185,12 +197,14 @@ void kcp_cli(const char* srv_addr)
     pthread_create(&kcp_update_tid, NULL, tick_kcp_update, kcp);
     
     while (1){
-
+        //printf("begin recvfrom...\n");
         if ((n=recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL)) < 0){
             ikcp_release(kcp);
             err_quit("read socker error\n");
         }
         
+        pthread_mutex_lock(&lock);
+
         //printf("server response, size: %d, ", n);
         //print_decode_kcp_str(recvline, n);
 
@@ -209,6 +223,8 @@ void kcp_cli(const char* srv_addr)
             fill_recv_stats(recvline, hr, "kcp_rcv_stats.dat");
             printf("\n");
         }
+
+        pthread_mutex_unlock(&lock);
 
     }
 }
