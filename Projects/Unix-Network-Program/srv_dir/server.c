@@ -15,11 +15,15 @@
 // <user_conv, kcp pointer>
 static void *kcp_map = NULL;
 
+pthread_mutex_t lock;
 
 void* tick_kcp_update(void* arg)
 {
     while (1) {
         usleep(1000);
+
+        pthread_mutex_lock(&lock);
+
         int **key_list = (int**) malloc(sizeof(int*));
         void ***val_list = (void***) malloc(sizeof(void**));
         *key_list = NULL;
@@ -32,6 +36,8 @@ void* tick_kcp_update(void* arg)
             ikcp_update(kcp, iclock());
         }
         
+        pthread_mutex_unlock(&lock);
+
         if (*key_list != NULL)
           free(*key_list);
         if (*val_list != NULL)
@@ -56,11 +62,7 @@ int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
     //printf("udp_output: connfd=%d, size=%d,", user_data->listenfd, len);
     print_decode_kcp_str(buf, len);
     // send to client
-    if (rand() % 2 == 0) {
-        sendto(user_data->listenfd, buf, len, 0, (struct sockaddr*) &user_data->cliaddr, user_data->cliaddr_len);
-    } else {
-        printf("loss... \n");
-    }
+    sendto(user_data->listenfd, buf, len, 0, (struct sockaddr*) &user_data->cliaddr, user_data->cliaddr_len);
 }
 
 void tcp_srv()
@@ -114,6 +116,8 @@ void kcp_srv()
     char buff[MAXLINE];
     const char *sign_str = " ==> reply from server\n";
     
+    pthread_mutex_init(&lock, NULL);
+
     pthread_t tid;
     pthread_create(&tid, NULL, tick_kcp_update, NULL);
 
@@ -136,6 +140,9 @@ again:
         
         ikcpcb *kcp = (ikcpcb*) unordered_map_find(kcp_map, (int)user_conv);
         
+        // 上锁
+        pthread_mutex_lock(&lock);
+
         if (kcp == NULL) {
             printf("create new kcp...\n");
             kcp = ikcp_create(user_conv, (void*) user);
@@ -167,6 +174,10 @@ again:
             ikcp_send(kcp, buff, hr);
             ikcp_update(kcp, iclock());
         }
+
+        //解锁
+        pthread_mutex_unlock(&lock);
+
         memset(buff, 0, MAXLINE);
     }
 
@@ -218,5 +229,8 @@ int main(int argc, char **argv)
             err_quit("invalid mode\n");
 
     }
+    
+    pthread_mutex_destroy(&lock);
+
     exit(0);
 }
