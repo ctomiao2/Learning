@@ -60,7 +60,7 @@ void* tcp_simulate_send_message(void *arg) {
         fprintf(fp, "%d:%lld\n", i+1, (long long int)iclock());
         write(sockfd, msg, strlen(msg));
         memset(msg, 0, 10);
-        usleep(20000);
+        usleep(200000);
     }
     fclose(fp);
     printf("\ntcp finish send message...\n");
@@ -152,7 +152,7 @@ void *kcp_simulate_send_message(void *arg)
         pthread_mutex_unlock(&lock);
 
         memset(msg, 0, 10);
-        usleep(20000);
+        usleep(200000);
     }
     fclose(fp);
     printf("\nkcp finish send message...\n");
