@@ -1,0 +1,12 @@
+tcp：
+	client send data size：3893
+	client recv data size：3893
+	server recv data size：3893
+
+kcp:
+	client send data size：53451
+	client recv data size：50653
+	server recv data size：53475
+
+tcp max: 1625, min: 7, avg: 45.856
+kcp max: 219, min: 9, avg: 22.121
