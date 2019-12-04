@@ -101,8 +101,9 @@ void tcp_srv()
 }
 
 
-void kcp_srv()
+void kcp_srv(int max_redundant)
 {
+    printf("kcp_srv, max_redundant=%d\n", max_redundant);
     int listenfd, n;
     struct sockaddr_in servaddr, cliaddr;
     socklen_t len = sizeof(cliaddr);
@@ -154,7 +155,7 @@ again:
             kcp->output = udp_output;
             ikcp_wndsize(kcp, 128, 128);
             ikcp_nodelay(kcp, 1, 10, 2, 1);
-            ikcp_max_redundant(kcp, 2);
+            ikcp_max_redundant(kcp, max_redundant);
             //kcp->rx_minrto = 10;
             //kcp->fastresend = 1;
             ikcp_input(kcp, buff, n);
@@ -230,7 +231,9 @@ int main(int argc, char **argv)
         if (*mode == '0')
             tcp_srv();
         else if (*mode == '1')
-            kcp_srv();
+            kcp_srv(0);
+        else if (*mode > '1' && *mode <= '9')
+            kcp_srv(*mode - '1');
         else
             err_quit("invalid mode\n");
 

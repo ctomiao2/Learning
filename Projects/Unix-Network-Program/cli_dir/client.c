@@ -169,8 +169,9 @@ void *kcp_simulate_send_message(void *arg)
     while (1) usleep(100000);
 }
 
-void kcp_cli(const char* srv_addr)
+void kcp_cli(const char* srv_addr, int max_redundant)
 {
+    printf("kcp_cli, max_redundant=%d\n", max_redundant);
     int sockfd, n;
     char recvline[MAXLINE+1];
     struct sockaddr_in servaddr;
@@ -194,7 +195,7 @@ void kcp_cli(const char* srv_addr)
     kcp->output = udp_output;
     ikcp_wndsize(kcp, 128, 128);
     ikcp_nodelay(kcp, 1, 10, 2, 1);
-    ikcp_max_redundant(kcp, 2);
+    ikcp_max_redundant(kcp, max_redundant);
     kcp->rx_minrto = 20;
     kcp->fastresend = 1;
     
@@ -245,7 +246,7 @@ void kcp_cli(const char* srv_addr)
 int main(int argc, char **argv)
 {
     if (argc < 2) 
-        err_quit("usage: client <ip> <mode> (0 tcp; 1 kcp; Default 0) <max_loop>");
+        err_quit("usage: client <ip> <mode> (0 tcp; 1 kcp; i i-redundant-rcp, Default 0) <max_loop>");
     
     char *mode = "0";
     if (argc > 2)
@@ -259,7 +260,9 @@ int main(int argc, char **argv)
     if (*mode == '0')
         tcp_cli(argv[1]);
     else if (*mode == '1')
-        kcp_cli(argv[1]);
+        kcp_cli(argv[1], 0);
+    else if (*mode > '1' && *mode <= '9')
+        kcp_cli(argv[1], *mode - '1');
     else
         err_quit("invalid mode\n");
 
