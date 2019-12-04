@@ -15,6 +15,11 @@ static int MAX_LOOP = 200;
 // 记录序号收到的时间
 //static long long int recv_stats[4096];
 
+// 接收流量
+long long int bundle_size = 0;
+// 发送流量
+long long int snd_bundle_size = 0;
+
 pthread_mutex_t lock;
 
 void fill_recv_stats(const char *recvline, int n, const char* output_filename)
@@ -59,6 +64,7 @@ void* tcp_simulate_send_message(void *arg) {
         //printf("\n");
         fprintf(fp, "%d:%lld\n", i+1, (long long int)iclock());
         write(sockfd, msg, strlen(msg));
+        snd_bundle_size += strlen(msg);
         memset(msg, 0, 10);
         usleep(200000);
     }
@@ -96,7 +102,10 @@ void tcp_cli(const char* srv_addr)
     while (1) {
         if ((n=read(sockfd, recvline, MAXLINE)) < 0)
             err_quit("read socket error\n");
-        printf("recv data: len=%d, %s", n, recvline);
+        
+        bundle_size += n;
+
+        printf("recv data: snd_bundle_size=%lld,  rcv_bundle_size=%lld, len=%d, %s", snd_bundle_size, bundle_size, n, recvline);
         fill_recv_stats(recvline, n, "tcp_rcv_stats.dat");
         memset(recvline, 0, MAXLINE);
     }
@@ -116,13 +125,14 @@ int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
     //print_decode_kcp_str(buf, len);
     // send msg to server
     sendto(user_data->sockfd, buf, len, 0, (struct sockaddr*) &user_data->servaddr, sizeof(user_data->servaddr));
+    snd_bundle_size += len;
 }
 
 void* tick_kcp_update(void *arg)
 {
     ikcpcb *kcp = (ikcpcb*) arg;
     while (1) {
-        usleep(20000);
+        usleep(1000);
         pthread_mutex_lock(&lock);
         ikcp_update(kcp, iclock());
         pthread_mutex_unlock(&lock);
@@ -202,7 +212,7 @@ void kcp_cli(const char* srv_addr)
             ikcp_release(kcp);
             err_quit("read socker error\n");
         }
-        
+               
         pthread_mutex_lock(&lock);
 
         //printf("server response, size: %d, ", n);
@@ -210,6 +220,8 @@ void kcp_cli(const char* srv_addr)
 
         ikcp_input(kcp, recvline, n);
         //ikcp_update(kcp, iclock());
+        
+        bundle_size += n;
 
         //char recved = 0;
         // response client
@@ -217,7 +229,7 @@ void kcp_cli(const char* srv_addr)
             int hr = ikcp_recv(kcp, recvline, MAXLINE);
             if (hr < 0) break;
             //recved = 1;
-            printf("recv data: ");
+            printf("recv data: snd_bundle_size=%lld, rcv_bundle_size=%lld, ", snd_bundle_size, bundle_size);
             int i;
             for (i = 0; i < hr; ++i) printf("%c", recvline[i]);
             fill_recv_stats(recvline, hr, "kcp_rcv_stats.dat");
