@@ -44,7 +44,7 @@ const IUINT32 IKCP_THRESH_MIN = 2;
 const IUINT32 IKCP_PROBE_INIT = 7000;		// 7 secs to probe window size
 const IUINT32 IKCP_PROBE_LIMIT = 120000;	// up to 120 secs to probe window
 const IUINT32 IKCP_FASTACK_LIMIT = 5;		// max times to trigger fastack
-const IUINT8 IKCP_MAX_REDUNDANCE = 1;
+const IUINT8 IKCP_MAX_REDUNDANCE = 0;
 
 
 //---------------------------------------------------------------------
@@ -1292,7 +1292,7 @@ int ikcp_interval(ikcpcb *kcp, int interval)
 	return 0;
 }
 
-int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc, int max_redu)
+int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc)
 {
 	if (nodelay >= 0) {
 		kcp->nodelay = nodelay;
@@ -1315,15 +1315,18 @@ int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc, int
 		kcp->nocwnd = nc;
 	}
 	
-	if (max_redu < 0) {
+	return 0;
+}
+
+void ikcp_max_redundant(ikcpcb *kcp, int max_redu)
+{
+    if (max_redu < 0) {
 		max_redu = 0;
 	}
 	if (max_redu > 9) {
 		max_redu = 9;
 	}
 	kcp->max_redu = max_redu;
-	
-	return 0;
 }
 
 

@@ -17,6 +17,8 @@ static void *kcp_map = NULL;
 
 pthread_mutex_t lock;
 
+long long int bundle_size = 0;
+
 void* tick_kcp_update(void* arg)
 {
     while (1) {
@@ -89,7 +91,8 @@ void tcp_srv()
             ntohs(cliaddr.sin_port));
     
         while ((n=read(connfd, buff, MAXLINE)) > 0) {
-            printf("recv data: len=%d, %s\n", n, buff);
+            bundle_size += n;
+            printf("recv data: len=%d, bundle_size=%lld, %s\n", n, bundle_size, buff);
             //memcpy(buff + n - 1, sign_str, strlen(sign_str) + 1);
             write(connfd, buff, n);
             memset(buff, 0, MAXLINE);
@@ -127,6 +130,8 @@ again:
         //printf("kcp connection from %s, port %d\n",
         //    inet_ntop(AF_INET, &cliaddr.sin_addr, buff, sizeof(buff)),
         //    ntohs(cliaddr.sin_port));
+        
+        bundle_size += n;
 
         IUINT32 user_conv = get_user_conv_from_kcp_str(buff, n);
         
@@ -159,7 +164,7 @@ again:
             ikcp_update(kcp, iclock());
         }
         
-        printf("client send: size=%d, ", n);
+        printf("client send: size=%d, bundle_size=%lld, ", n, bundle_size);
         print_decode_kcp_str(buff, n);
 
         // response client
