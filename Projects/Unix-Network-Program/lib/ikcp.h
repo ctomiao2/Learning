@@ -312,6 +312,7 @@ struct IKCPCB
 	int fastlimit;
 	int nocwnd, stream;
 	int logmask;
+	int max_redu; // 最大冗余次数, max_redu为0即退化为普通kcp
 	int (*output)(const char *buf, int len, struct IKCPCB *kcp, void *user);
 	void (*writelog)(const char *log, struct IKCPCB *kcp, void *user);
 };
@@ -395,7 +396,8 @@ int ikcp_waitsnd(const ikcpcb *kcp);
 // interval: internal update timer interval in millisec, default is 100ms 
 // resend: 0:disable fast resend(default), 1:enable fast resend
 // nc: 0:normal congestion control(default), 1:disable congestion control
-int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc);
+// max_redu: max redundant segments
+int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc, int max_redu);
 
 
 void ikcp_log(ikcpcb *kcp, int mask, const char *fmt, ...);
