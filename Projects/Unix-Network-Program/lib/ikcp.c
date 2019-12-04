@@ -1074,7 +1074,7 @@ void ikcp_flush(ikcpcb *kcp)
 			segment->resendts = current + segment->rto;
 			lost = 1;
 		}
-		else if (kcp->max_redu == 0 && segment->fastack >= resent) {
+		else if (segment->fastack >= resent) {
 			if ((int)segment->xmit <= kcp->fastlimit || 
 				kcp->fastlimit <= 0) {
 				needsend = 1;
@@ -1096,8 +1096,8 @@ void ikcp_flush(ikcpcb *kcp)
 				// 把前面的最多kcp->max_redu段冗余segment塞进去
 			
 			while (idx < kcp->max_redu) {
-				// seg在本轮已发送
-				if (redundant_segments[idx] == NULL || redundant_sent_flags[idx] == 0) {
+			    
+				if (redundant_segments[idx] == NULL/* || redundant_sent_flags[idx] == 0*/) {
 					++idx;
 					continue;
 				}
@@ -1113,7 +1113,7 @@ void ikcp_flush(ikcpcb *kcp)
                 redundant_segments[idx]->wnd = seg.wnd;
                 redundant_segments[idx]->una = kcp->rcv_nxt;
 				ptr = ikcp_encode_seg(ptr, redundant_segments[idx]);
-				if (redundant_segments[idx]->len > 0) {
+                if (redundant_segments[idx]->len > 0) {
 					memcpy(ptr, redundant_segments[idx]->data, redundant_segments[idx]->len);
 					ptr += redundant_segments[idx]->len;
 				}
