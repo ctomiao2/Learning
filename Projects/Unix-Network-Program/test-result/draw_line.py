@@ -9,6 +9,14 @@ def main():
 	plt.title("RTT-Line")
 	plt.xlabel("segment-sequence")
 	plt.ylabel("RTT(ms)")
+	plt.yscale('log')
+	yticks = []
+	yticks.extend(range(0, 100, 10))
+	yticks.extend(range(100, 1000, 100))
+	yticks.extend(range(1000, 10000, 1000))
+	yticks.extend(range(10000, 100000, 10000))
+	ylabels = list(str(x) for x in yticks)
+	plt.yticks(yticks, ylabels, size='8')
 
 	tcp_snd_ts = {}
 	tcp_rcv_ts = {}

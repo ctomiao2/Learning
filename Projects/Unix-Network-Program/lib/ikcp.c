@@ -44,6 +44,7 @@ const IUINT32 IKCP_THRESH_MIN = 2;
 const IUINT32 IKCP_PROBE_INIT = 7000;		// 7 secs to probe window size
 const IUINT32 IKCP_PROBE_LIMIT = 120000;	// up to 120 secs to probe window
 const IUINT32 IKCP_FASTACK_LIMIT = 5;		// max times to trigger fastack
+const IUINT8 IKCP_MAX_REDUNDANCE = 0;
 
 
 //---------------------------------------------------------------------
@@ -253,6 +254,7 @@ ikcpcb* ikcp_create(IUINT32 conv, void *user)
 	kcp->mtu = IKCP_MTU_DEF;
 	kcp->mss = kcp->mtu - IKCP_OVERHEAD;
 	kcp->stream = 0;
+	kcp->max_redu = IKCP_MAX_REDUNDANCE;
 
 	kcp->buffer = (char*)ikcp_malloc((kcp->mtu + IKCP_OVERHEAD) * 3);
 	if (kcp->buffer == NULL) {
@@ -1041,6 +1043,15 @@ void ikcp_flush(ikcpcb *kcp)
 	resent = (kcp->fastresend > 0)? (IUINT32)kcp->fastresend : 0xffffffff;
 	rtomin = (kcp->nodelay == 0)? (kcp->rx_rto >> 3) : 0;
 
+	struct IKCPSEG **redundant_segments = NULL;
+	char *redundant_sent_flags = NULL;
+	if (kcp->max_redu > 0) {
+		redundant_segments = (struct IKCPSEG**)malloc(kcp->max_redu * sizeof(struct IKCPSEG*));
+		memset(redundant_segments, 0, kcp->max_redu * sizeof(struct IKCPSEG*));
+		redundant_sent_flags = (char*)malloc(kcp->max_redu);
+		memset(redundant_sent_flags, 0, kcp->max_redu);
+	}
+
 	// flush data segments
 	for (p = kcp->snd_buf.next; p != &kcp->snd_buf; p = p->next) {
 		IKCPSEG *segment = iqueue_entry(p, IKCPSEG, node);
@@ -1063,7 +1074,7 @@ void ikcp_flush(ikcpcb *kcp)
 			segment->resendts = current + segment->rto;
 			lost = 1;
 		}
-		else if (segment->fastack >= resent) {
+		else if (kcp->max_redu == 0 && segment->fastack >= resent) {
 			if ((int)segment->xmit <= kcp->fastlimit || 
 				kcp->fastlimit <= 0) {
 				needsend = 1;
@@ -1080,6 +1091,34 @@ void ikcp_flush(ikcpcb *kcp)
 			segment->wnd = seg.wnd;
 			segment->una = kcp->rcv_nxt;
 
+				// 把前面的最多kcp->max_redu段冗余segment塞进去
+			int idx = 0;
+			while (idx < kcp->max_redu) {
+				// seg在本轮已发送
+				if (redundant_segments[idx] == NULL || redundant_sent_flags[idx] == 0) {
+					++idx;
+					continue;
+				}
+				// 继续append会超出限制, 要先把现有的data发送出去
+				size = (int)(ptr - buffer);
+				need = IKCP_OVERHEAD + redundant_segments[idx]->len;
+				if (size + need >(int)kcp->mtu) {
+					ikcp_output(kcp, buffer, size);
+					ptr = buffer;
+				}
+				// 追加冗余segment
+				ptr = ikcp_encode_seg(ptr, redundant_segments[idx]);
+				if (redundant_segments[idx]->len > 0) {
+					memcpy(ptr, redundant_segments[idx]->data, redundant_segments[idx]->len);
+					ptr += redundant_segments[idx]->len;
+				}
+				// 标记为已发送, 本轮无需再次发送
+				redundant_sent_flags[idx] = 1;
+				++idx;
+			}
+
+			//最后再append当前segment
+
 			size = (int)(ptr - buffer);
 			need = IKCP_OVERHEAD + segment->len;
 
@@ -1095,11 +1134,27 @@ void ikcp_flush(ikcpcb *kcp)
 				ptr += segment->len;
 			}
 
+			// 更新redundant_segments为最新的kcp->max_redu段
+			for (idx = 0; idx < kcp->max_redu - 1; ++idx) {
+				redundant_segments[idx] = redundant_segments[idx + 1];
+				redundant_sent_flags[idx] = redundant_sent_flags[idx + 1];
+			}
+			if (kcp->max_redu > 0) {
+				redundant_segments[kcp->max_redu - 1] = segment;
+				redundant_sent_flags[kcp->max_redu - 1] = needsend;
+			}
+
 			if (segment->xmit >= kcp->dead_link) {
 				kcp->state = -1;
 			}
 		}
 	}
+
+	if (redundant_segments != NULL)
+		free(redundant_segments);
+
+	if (redundant_sent_flags != NULL)
+		free(redundant_sent_flags);
 
 	// flash remain segments
 	size = (int)(ptr - buffer);
@@ -1259,7 +1314,19 @@ int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc)
 	if (nc >= 0) {
 		kcp->nocwnd = nc;
 	}
+	
 	return 0;
+}
+
+void ikcp_max_redundant(ikcpcb *kcp, int max_redu)
+{
+    if (max_redu < 0) {
+		max_redu = 0;
+	}
+	if (max_redu > 9) {
+		max_redu = 9;
+	}
+	kcp->max_redu = max_redu;
 }
 
 
