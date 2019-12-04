@@ -1084,6 +1084,8 @@ void ikcp_flush(ikcpcb *kcp)
 				change++;
 			}
 		}
+        
+        int idx = 0;
 
 		if (needsend) {
 			int size, need;
@@ -1092,7 +1094,7 @@ void ikcp_flush(ikcpcb *kcp)
 			segment->una = kcp->rcv_nxt;
 
 				// 把前面的最多kcp->max_redu段冗余segment塞进去
-			int idx = 0;
+			
 			while (idx < kcp->max_redu) {
 				// seg在本轮已发送
 				if (redundant_segments[idx] == NULL || redundant_sent_flags[idx] == 0) {
@@ -1132,21 +1134,21 @@ void ikcp_flush(ikcpcb *kcp)
 			if (segment->len > 0) {
 				memcpy(ptr, segment->data, segment->len);
 				ptr += segment->len;
-			}
-
-			// 更新redundant_segments为最新的kcp->max_redu段
-			for (idx = 0; idx < kcp->max_redu - 1; ++idx) {
-				redundant_segments[idx] = redundant_segments[idx + 1];
-				redundant_sent_flags[idx] = redundant_sent_flags[idx + 1];
-			}
-			if (kcp->max_redu > 0) {
-				redundant_segments[kcp->max_redu - 1] = segment;
-				redundant_sent_flags[kcp->max_redu - 1] = needsend;
-			}
+			}	
 
 			if (segment->xmit >= kcp->dead_link) {
 				kcp->state = -1;
 			}
+		}
+        
+        // 更新redundant_segments为最新的kcp->max_redu段
+		for (idx = 0; idx < kcp->max_redu - 1; ++idx) {
+			redundant_segments[idx] = redundant_segments[idx + 1];
+			redundant_sent_flags[idx] = redundant_sent_flags[idx + 1];
+		}
+		if (kcp->max_redu > 0) {
+			redundant_segments[kcp->max_redu - 1] = segment;
+			redundant_sent_flags[kcp->max_redu - 1] = needsend;
 		}
 	}
 
