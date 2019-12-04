@@ -1109,6 +1109,9 @@ void ikcp_flush(ikcpcb *kcp)
 					ptr = buffer;
 				}
 				// 追加冗余segment
+                redundant_segments[idx]->ts = current;
+                redundant_segments[idx]->wnd = seg.wnd;
+                redundant_segments[idx]->una = kcp->rcv_nxt;
 				ptr = ikcp_encode_seg(ptr, redundant_segments[idx]);
 				if (redundant_segments[idx]->len > 0) {
 					memcpy(ptr, redundant_segments[idx]->data, redundant_segments[idx]->len);
