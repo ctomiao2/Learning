@@ -66,7 +66,7 @@ void* tcp_simulate_send_message(void *arg) {
         write(sockfd, msg, strlen(msg));
         snd_bundle_size += strlen(msg);
         memset(msg, 0, 10);
-        usleep(200000);
+        usleep(50000);
     }
     fclose(fp);
     printf("\ntcp finish send message...\n");
@@ -162,7 +162,7 @@ void *kcp_simulate_send_message(void *arg)
         pthread_mutex_unlock(&lock);
 
         memset(msg, 0, 10);
-        usleep(200000);
+        usleep(50000);
     }
     fclose(fp);
     printf("\nkcp finish send message...\n");
