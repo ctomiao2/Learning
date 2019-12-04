@@ -154,6 +154,7 @@ again:
             kcp->output = udp_output;
             ikcp_wndsize(kcp, 128, 128);
             ikcp_nodelay(kcp, 1, 10, 2, 1);
+            ikcp_max_redundant(kcp, 2);
             //kcp->rx_minrto = 10;
             //kcp->fastresend = 1;
             ikcp_input(kcp, buff, n);
