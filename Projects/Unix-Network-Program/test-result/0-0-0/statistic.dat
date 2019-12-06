@@ -11,7 +11,7 @@ rcp-1:
 	client recv data size：59417
 
 rcp-2:
-	client send data size：66869
+	client send data size：66876
 	client recv data size：59393
 
 tcp max: 16, min: 6, avg: 7.096
