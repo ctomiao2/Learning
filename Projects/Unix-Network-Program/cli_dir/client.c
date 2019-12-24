@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>	/* sockaddr_in{} and other Internet defns */
 #include <arpa/inet.h>	/* inet(3) functions */
+#include <netinet/tcp.h>
 #include <errno.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -83,6 +84,9 @@ void tcp_cli(const char* srv_addr)
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(7000);
+   
+    int enable = 1;
+    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (void*)&enable, sizeof(enable));
     
     //setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (int[]){1}, sizeof(int));
     //setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (int[]){1}, sizeof(int));

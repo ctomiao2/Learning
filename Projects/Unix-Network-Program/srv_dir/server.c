@@ -2,6 +2,7 @@
 #include <netinet/in.h>	/* sockaddr_in{} and other Internet defns */
 #include <arpa/inet.h>	/* inet(3) functions */
 #include <errno.h>
+#include <netinet/tcp.h>
 
 #ifdef	HAVE_SYS_SELECT_H
 # include	<sys/select.h>	/* for convenience */
@@ -85,6 +86,8 @@ void tcp_srv()
     while(1) {
         len = sizeof(cliaddr);
         connfd = accept(listenfd, (struct servaddr*) &cliaddr, &len);
+        int enable = 1;
+        setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, (void*)&enable, sizeof(enable)); 
         
         printf("tcp connection from %s, port %d\n",
             inet_ntop(AF_INET, &cliaddr.sin_addr, buff, sizeof(buff)),
