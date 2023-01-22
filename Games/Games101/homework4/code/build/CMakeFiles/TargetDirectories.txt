@@ -1,0 +1,3 @@
+/mnt/d/Learn/GameEgineDev/Games101/homework4/code/build/CMakeFiles/rebuild_cache.dir
+/mnt/d/Learn/GameEgineDev/Games101/homework4/code/build/CMakeFiles/BezierCurve.dir
+/mnt/d/Learn/GameEgineDev/Games101/homework4/code/build/CMakeFiles/edit_cache.dir

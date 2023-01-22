@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/mnt/d/Learn/GameEgineDev/Games101/homework4/code/main.cpp
+chrono
+-
+iostream
+-
+opencv2/opencv.hpp
+-
+

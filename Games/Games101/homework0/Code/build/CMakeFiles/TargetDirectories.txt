@@ -1,0 +1,3 @@
+/mnt/d/Learn/GameEgineDev/Games101/homework0/Code/build/CMakeFiles/rebuild_cache.dir
+/mnt/d/Learn/GameEgineDev/Games101/homework0/Code/build/CMakeFiles/Transformation.dir
+/mnt/d/Learn/GameEgineDev/Games101/homework0/Code/build/CMakeFiles/edit_cache.dir
